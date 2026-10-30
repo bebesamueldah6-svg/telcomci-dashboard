@@ -201,37 +201,78 @@ def cohorte(periode):
 
 def aller_a(page):
     st.session_state["page"] = page
+    st.query_params["page"] = str(NOMS.index(page))
+
+
+def page_changee():
+    """Le menu latéral met à jour l'adresse, pour que chaque page ait son lien direct."""
+    st.query_params["page"] = str(NOMS.index(st.session_state["page"]))
 
 
 # ---------------------------------------------------------------------------
 # 0. Accueil
 # ---------------------------------------------------------------------------
 def p_accueil():
+    """Accueil : les 15 pages disposées autour du cercle « cycle de vie », chacune cliquable."""
     st.markdown("<div class='titre-page'><span>TelcomCI</span>HR Analytics</div>", unsafe_allow_html=True)
-    st.write("")
-    gauche, droite = st.columns([1.1, 1])
-    with gauche:
-        fig = go.Figure()
-        for r, couleur, debut, fin in [(1.0, GRIS_FONCE, 40, 330), (0.84, GRIS, 100, 400), (0.68, JAUNE, 190, 470)]:
-            t = np.radians(np.linspace(debut, fin, 120))
-            fig.add_trace(go.Scatter(x=r * np.cos(t), y=r * np.sin(t), mode="lines",
-                                     line=dict(color=couleur, width=26), hoverinfo="skip"))
-        fig.add_annotation(x=0, y=0, text="<b>Cycle de vie<br>du collaborateur</b>", showarrow=False,
-                           font=dict(size=22, color=GRIS_FONCE))
-        fig.update_layout(height=430, showlegend=False, margin=dict(l=0, r=0, t=0, b=0),
-                          xaxis=dict(visible=False, range=[-1.25, 1.25]),
-                          yaxis=dict(visible=False, range=[-1.25, 1.25], scaleanchor="x"),
-                          plot_bgcolor="rgba(0,0,0,0)")
-        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False, "staticPlot": True})
-    with droite:
-        st.markdown("##### Sommaire")
-        cols = st.columns(2)
-        for i, nom in enumerate(list(PAGES)[1:]):
-            cols[i % 2].button(nom, key=f"acc_{i}", width="stretch", on_click=aller_a, args=(nom,))
+
+    L, H, cx, cy = 1020, 640, 510, 320            # zone de dessin (px) et centre du cercle
+
+    def arc(r, a0, a1, couleur, epaisseur):
+        """Arc de cercle SVG lisse entre deux angles (degrés, 0 = droite, sens horaire)."""
+        x0, y0 = cx + r * np.cos(np.radians(a0)), cy + r * np.sin(np.radians(a0))
+        x1, y1 = cx + r * np.cos(np.radians(a1)), cy + r * np.sin(np.radians(a1))
+        grand = 1 if (a1 - a0) % 360 > 180 else 0
+        return (f"<path d='M {x0:.1f} {y0:.1f} A {r} {r} 0 {grand} 1 {x1:.1f} {y1:.1f}' fill='none' "
+                f"stroke='{couleur}' stroke-width='{epaisseur}' stroke-linecap='butt'/>")
+
+    svg = (f"<svg width='{L}' height='{H}' style='position:absolute;left:0;top:0'>"
+           + arc(172, 150, 70, GRIS_FONCE, 40)        # grand arc gris foncé
+           + arc(141, 230, 140, GRIS, 34)             # arc gris moyen
+           + arc(113, 320, 230, JAUNE, 30)            # arc jaune intérieur
+           + f"<text x='{cx}' y='{cy - 6}' text-anchor='middle' font-size='22' font-weight='700' fill='{GRIS_FONCE}'"
+             " font-family='sans-serif'>Cycle de vie</text>"
+           + f"<text x='{cx}' y='{cy + 22}' text-anchor='middle' font-size='22' font-weight='700' fill='{GRIS_FONCE}'"
+             " font-family='sans-serif'>du collaborateur</text></svg>")
+
+    etiquettes = []
+    noms = NOMS[1:]
+    # 1 en haut ; 2 à 8 descendent à droite ; 9 à 15 remontent à gauche (comme le rapport Power BI)
+    angles = [-90] + [-66 + 24 * k for k in range(7)] + [102 + 24 * k for k in range(7)]
+    for i, nom in enumerate(noms):
+        numero, titre = nom.split(" · ", 1)
+        angle = angles[i]
+        x = cx + 255 * np.cos(np.radians(angle))
+        y = cy + (-292 if i == 0 else 268 * np.sin(np.radians(angle)))
+        droite = np.cos(np.radians(angle)) > 0
+        decalage = ("translate(-50%,-50%)" if i == 0                  # 1 centré au-dessus du cercle
+                    else "translate(0,-50%)" if droite else "translate(-100%,-50%)")
+        etiquettes.append(
+            f"<a class='acc-lien' href='?page={i + 1}' target='_self' "
+            f"style='left:{x:.0f}px;top:{y:.0f}px;transform:{decalage}'>"
+            f"<span class='acc-num'>{numero}</span><span class='acc-titre'>{titre}</span></a>")
+
+    st.markdown(f"""
+<style>
+  .acc-zone {{position:relative; width:{L}px; height:{H}px; margin:0 auto;}}
+  .acc-defile {{overflow-x:auto;}}
+  .acc-lien {{position:absolute; display:flex; align-items:center; gap:6px; text-decoration:none !important;
+             white-space:nowrap; transition: transform .15s;}}
+  .acc-num {{background:radial-gradient(circle at 35% 30%, #FFF6C2, {JAUNE} 60%); color:#333; font-weight:700;
+            border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+            box-shadow:0 1px 3px rgba(0,0,0,.35); font-size:.9rem;}}
+  .acc-titre {{background:#fff; color:#222; font-weight:600; padding:5px 11px; border-radius:3px;
+              box-shadow:2px 3px 6px rgba(0,0,0,.18); font-size:.93rem;}}
+  .acc-lien:hover .acc-titre {{background:{JAUNE}; color:#222;}}
+  .acc-lien:hover .acc-num {{box-shadow:0 0 0 3px rgba(242,200,17,.45);}}
+</style>
+<div class='acc-defile'><div class='acc-zone'>{svg}{''.join(etiquettes)}</div></div>
+""", unsafe_allow_html=True)
+
     act = DF[DF["jeu"] == "actuel"]
-    st.markdown(f"<div class='note'>Données TelcoPeople · {len(act)} collaborateurs au 31/12/2024 · "
-                f"historique semestriel depuis juin 2022 · départs connus jusqu'à la cohorte du 30/06/2024.</div>",
-                unsafe_allow_html=True)
+    st.markdown(f"<div class='note' style='text-align:center'>Cliquez sur un thème pour ouvrir son tableau de bord · "
+                f"Données TelcoPeople : {len(act)} collaborateurs au 31/12/2024, historique semestriel depuis juin 2022, "
+                f"départs connus jusqu'à la cohorte du 30/06/2024.</div>", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1108,11 +1149,14 @@ PAGES = {
 }
 NOMS = list(PAGES)
 
-if "page" not in st.session_state:
+demande = st.query_params.get("page")
+if demande is not None and demande.isdigit() and int(demande) < len(NOMS):
+    st.session_state["page"] = NOMS[int(demande)]          # lien direct ou clic depuis l'accueil
+elif "page" not in st.session_state:
     st.session_state["page"] = NOMS[0]
 st.sidebar.markdown(f"<div style='font-size:1.4rem;font-weight:700'><span style='color:{JAUNE}'>HR</span> Analytics</div>"
                     "<div class='note'>TelcomCI · Direction des Ressources Humaines</div>", unsafe_allow_html=True)
-st.sidebar.radio("Navigation", NOMS, key="page", label_visibility="collapsed")
+st.sidebar.radio("Navigation", NOMS, key="page", label_visibility="collapsed", on_change=page_changee)
 st.sidebar.markdown(f"<div class='note'>Absentéisme = jours d'absence sur 6 mois ÷ {JOURS_OUVRES_6M} jours ouvrés. "
                     "Départ = départ dans les 6 mois suivant la date de référence. "
                     "Arrivée = embauche dans les 6 mois précédant la date de référence.</div>", unsafe_allow_html=True)
