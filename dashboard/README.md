@@ -8,17 +8,27 @@ Dashboard interactif Streamlit pour la Direction des Ressources Humaines. Il per
 
 ## Contenu
 
-| Onglet | Ce qu'on y suit |
-|---|---|
-| 👥 Effectifs | Évolution par semestre, répartition par département, pyramide des âges, grades, contrats, ancienneté, villes, métiers |
-| 💰 Masse salariale | Évolution, répartition par département, salaires par grade, positionnement salaire / référence du grade, écart salarial femmes / hommes |
-| 🩺 Absentéisme | Taux d'absentéisme, part des absences non justifiées, détail par département et par mois |
-| ⭐ Performance & engagement | Évolution des notes, croisement performance × engagement, « talents à risque » |
-| 🚪 Turnover | Taux de départ à 6 mois par cohorte, département, engagement, salaire, métier et ancienneté |
-| 🎯 Risque de départ | Score de risque au 31/12/2024, liste prioritaire d'entretiens avec les principaux facteurs, export CSV |
-| 🪪 Fiche collaborateur | Profil individuel : niveau de risque, facteurs, comparaison à la moyenne du département, absences mois par mois |
+Le dashboard suit la logique « cycle de vie du collaborateur » : une page d'accueil avec le sommaire, puis 15 pages thématiques. Chaque page a ses segments **Période** (photographies semestrielles) et **Département**.
 
-Les filtres de la barre latérale (département, site, ville, contrat, grade) s'appliquent à tous les onglets.
+| # | Page | Ce qu'on y suit |
+|---|---|---|
+| 1 | Vue d'ensemble RH | Collaborateurs, diversité, recrutements et départs, avec tendances |
+| 2 | Analyse démographique | Effectif, arrivées, départs, genre, âge, ancienneté, contrats, villes, tranches de salaire |
+| 3 | Analyse de la diversité | Générations, niveau d'études, grade × genre, femmes cadres, diversité par ville |
+| 4 | Fiche collaborateur | Profil individuel, rémunération, absences, performance, niveau et facteurs de risque |
+| 5 | Historique et tendances | Effectif et départs par période, évolution de l'effectif, départs par genre |
+| 6 | Nouveaux arrivants | Arrivées par genre, grade, âge, tendance, arrivées et départs, top départements |
+| 7 | Analyse salariale | Masse salariale, salaires moyens par genre, département, grade, ville, âge, top postes |
+| 8 | Écart salarial F / H | Écart par âge, département, grade et ville, écart à grade égal |
+| 9 | Évaluation de la performance | Niveaux de performance, répartition par genre, ancienneté et âge |
+| 10 | Absentéisme | Taux global, par genre, contrat, âge, grade, ancienneté, site et département |
+| 11 | Absences par département | Jours d'absence et non justifiés par ancienneté, grade, poste, collaborateurs les plus absents |
+| 12 | Profil des départs | Départs par ancienneté, contrat, grade, genre, ville, département et performance |
+| 13 | Analyse des départs | Taux de départ global, CDI/CDD, cadres, tendances, comparaison avec la période précédente |
+| 14 | Prédiction des départs | Liste filtrable des scores de risque au 31/12/2024, avec facteurs et export CSV |
+| 15 | Profil département | Vue d'ensemble, départs et prédiction pour un département, avec synthèse rédigée |
+
+Adaptations aux données TelcoPeople : pas de noms (identifiants anonymisés), pas de pays ni de type de départ, données semestrielles et non mensuelles. Les « Business Units » sont remplacées par les départements, et le motif de départ par le niveau de performance.
 
 **Définitions**
 - *Taux d'absentéisme* = jours d'absence sur 6 mois ÷ 130 jours ouvrés.
