@@ -12,7 +12,8 @@ from plotly.subplots import make_subplots
 
 from preparation import JOURS_OUVRES_6M, TAUX_SIGNALEMENT, charger, entrainer_modele, facteurs_individuels
 
-st.set_page_config(page_title="TelcomCI · HR Analytics", page_icon="🟡", layout="wide")
+st.set_page_config(page_title="TelcomCI · HR Analytics", page_icon="🟡", layout="wide",
+                   initial_sidebar_state="collapsed")
 
 # ---------------------------------------------------------------------------
 # Charte graphique : jaune et gris
@@ -43,6 +44,9 @@ st.markdown(f"""
                            font-weight: 700 !important;}}
   .note {{color: #777; font-size: .78rem;}}
   div[data-testid="stVerticalBlockBorderWrapper"] {{box-shadow: 0 1px 4px rgba(0,0,0,.10);}}
+  section[data-testid="stSidebar"], div[data-testid="stSidebarCollapsedControl"],
+  button[data-testid="stExpandSidebarButton"] {{display: none !important;}}
+  .st-key-nav-pages button {{padding: 2px 0 !important; min-height: 2.1rem !important; font-size: 1.05rem !important;}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -172,9 +176,22 @@ def evolution(serie, periode):
     return serie.iloc[i] / serie.iloc[i - 1] - 1
 
 
+def navigation(conteneur):
+    """Boutons ◀ 🏠 ▶ : page précédente, accueil, page suivante (comme les icônes du rapport Power BI)."""
+    i = NOMS.index(st.session_state["page"])
+    with conteneur.container(key="nav-pages"):
+        c = st.columns(3, gap="small")
+        c[0].button("◀", key="nav_prec", help="Page précédente", width="stretch", disabled=i <= 1,
+                    on_click=aller_a, args=(NOMS[max(i - 1, 0)],))
+        c[1].button("🏠", key="nav_accueil", help="Accueil", width="stretch", on_click=aller_a, args=(NOMS[0],))
+        c[2].button("▶", key="nav_suiv", help="Page suivante", width="stretch", disabled=i >= len(NOMS) - 1,
+                    on_click=aller_a, args=(NOMS[min(i + 1, len(NOMS) - 1)],))
+
+
 def en_tete(numero, titre, periodes=PERIODES, cle="", avec_departement=True, defaut=None):
-    """Titre de page + segments Période / Département, à la manière des en-têtes Power BI."""
-    gauche, milieu, droite = st.columns([3, 3, 1.3])
+    """Titre de page + segments Période / Département + navigation, à la manière des en-têtes Power BI."""
+    gauche, milieu, droite, nav = st.columns([3, 3, 1.3, 0.9])
+    navigation(nav)
     gauche.markdown(f"<div class='titre-page'><span>{numero}</span>{titre}</div>", unsafe_allow_html=True)
     periode = None
     if periodes:
@@ -203,10 +220,6 @@ def aller_a(page):
     st.session_state["page"] = page
     st.query_params["page"] = str(NOMS.index(page))
 
-
-def page_changee():
-    """Le menu latéral met à jour l'adresse, pour que chaque page ait son lien direct."""
-    st.query_params["page"] = str(NOMS.index(st.session_state["page"]))
 
 
 # ---------------------------------------------------------------------------
@@ -270,9 +283,13 @@ def p_accueil():
 """, unsafe_allow_html=True)
 
     act = DF[DF["jeu"] == "actuel"]
-    st.markdown(f"<div class='note' style='text-align:center'>Cliquez sur un thème pour ouvrir son tableau de bord · "
+    st.markdown(f"<div class='note' style='text-align:center'>Cliquez sur un thème pour ouvrir son tableau de bord. "
+                f"Sur chaque page, les boutons ◀ 🏠 ▶ en haut à droite permettent de naviguer.<br>"
                 f"Données TelcoPeople : {len(act)} collaborateurs au 31/12/2024, historique semestriel depuis juin 2022, "
-                f"départs connus jusqu'à la cohorte du 30/06/2024.</div>", unsafe_allow_html=True)
+                f"départs connus jusqu'à la cohorte du 30/06/2024. "
+                f"Absentéisme = jours d'absence sur 6 mois ÷ {JOURS_OUVRES_6M} jours ouvrés · "
+                f"Départ = départ dans les 6 mois suivant la date de référence · "
+                f"Arrivée = embauche dans les 6 mois précédant la date de référence.</div>", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -996,7 +1013,8 @@ def p_analyse_departs():
 # 14. Prédiction des départs
 # ---------------------------------------------------------------------------
 def p_prediction():
-    gauche, droite = st.columns([3, 1.4])
+    gauche, droite, nav = st.columns([3, 1.4, 0.9])
+    navigation(nav)
     gauche.markdown("<div class='titre-page'><span>14</span>Prédiction des départs</div>", unsafe_allow_html=True)
     droite.button("PRÉDICTION PAR DÉPARTEMENT ➜", type="primary", width="stretch", on_click=aller_a, args=(NOMS[15],))
     st.write("")
@@ -1154,10 +1172,4 @@ if demande is not None and demande.isdigit() and int(demande) < len(NOMS):
     st.session_state["page"] = NOMS[int(demande)]          # lien direct ou clic depuis l'accueil
 elif "page" not in st.session_state:
     st.session_state["page"] = NOMS[0]
-st.sidebar.markdown(f"<div style='font-size:1.4rem;font-weight:700'><span style='color:{JAUNE}'>HR</span> Analytics</div>"
-                    "<div class='note'>TelcomCI · Direction des Ressources Humaines</div>", unsafe_allow_html=True)
-st.sidebar.radio("Navigation", NOMS, key="page", label_visibility="collapsed", on_change=page_changee)
-st.sidebar.markdown(f"<div class='note'>Absentéisme = jours d'absence sur 6 mois ÷ {JOURS_OUVRES_6M} jours ouvrés. "
-                    "Départ = départ dans les 6 mois suivant la date de référence. "
-                    "Arrivée = embauche dans les 6 mois précédant la date de référence.</div>", unsafe_allow_html=True)
 PAGES[st.session_state["page"]]()
