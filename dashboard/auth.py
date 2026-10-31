@@ -1,6 +1,7 @@
 """Connexion simple par mot de passe, avec deux rôles de démonstration.
 
-Les comptes sont lus dans les secrets Streamlit (jamais dans le dépôt) :
+Les comptes sont lus dans les secrets Streamlit s'ils existent, sinon dans dashboard/comptes_demo.toml.
+Ce fichier ne contient que des empreintes salées (jamais de mot de passe en clair) :
 
     [comptes.drh]
     role = "drh"
@@ -12,6 +13,8 @@ Générer une empreinte :  python dashboard/auth.py <mot_de_passe>
 """
 import hashlib
 import hmac
+import tomllib
+from pathlib import Path
 import secrets
 import sys
 import time
@@ -33,9 +36,18 @@ def empreinte(mot_de_passe, sel):
     return hashlib.pbkdf2_hmac("sha256", mot_de_passe.encode(), bytes.fromhex(sel), ITERATIONS).hex()
 
 
+COMPTES_DEMO = Path(__file__).with_name("comptes_demo.toml")
+
+
 def comptes():
+    """Secrets Streamlit en priorité ; à défaut, comptes de démonstration (empreintes uniquement)."""
     try:
         return {k: dict(v) for k, v in st.secrets["comptes"].items()}
+    except Exception:
+        pass
+    try:
+        with open(COMPTES_DEMO, "rb") as f:
+            return tomllib.load(f)
     except Exception:
         return {}
 

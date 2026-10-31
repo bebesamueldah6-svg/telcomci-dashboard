@@ -1,0 +1,11 @@
+[drh]
+role = "drh"
+nom = "Direction des Ressources Humaines"
+sel = "8aa26bfee82638b758d2c57aaca062c0"
+empreinte = "1cda54bb8c9b51ace0e7f7e01cabba3067cb5967d049b2bad9a11d1ba465ae32"
+
+[direction]
+role = "direction"
+nom = "Direction générale"
+sel = "752e476ab6ca1ace6ee5442b4c10256d"
+empreinte = "97b72a2a30edf9368768ccbc72543a629121fad9e8e2d176ba463a8027dbc3ad"
