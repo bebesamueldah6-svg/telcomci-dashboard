@@ -1,4 +1,4 @@
-"""TelcomCI · HR Analytics — dashboard RH sur le modèle « cycle de vie du collaborateur ».
+"""TelcoPeople · HR Analytics — dashboard RH sur le modèle « cycle de vie du collaborateur ».
 
 Une page d'accueil et quinze pages thématiques, appliquées aux données TelcoPeople.
 Lancement local :  streamlit run dashboard/app.py
@@ -12,7 +12,7 @@ from plotly.subplots import make_subplots
 
 from preparation import JOURS_OUVRES_6M, TAUX_SIGNALEMENT, charger, entrainer_modele, facteurs_individuels
 
-st.set_page_config(page_title="TelcomCI · HR Analytics", page_icon="🟡", layout="wide",
+st.set_page_config(page_title="TelcoPeople · HR Analytics", page_icon="🟡", layout="wide",
                    initial_sidebar_state="collapsed")
 
 # ---------------------------------------------------------------------------
@@ -227,7 +227,7 @@ def aller_a(page):
 # ---------------------------------------------------------------------------
 def p_accueil():
     """Accueil : les 15 pages disposées autour du cercle « cycle de vie », chacune cliquable."""
-    st.markdown("<div class='titre-page'><span>TelcomCI</span>HR Analytics</div>", unsafe_allow_html=True)
+    st.markdown("<div class='titre-page'><span>TelcoPeople</span>HR Analytics</div>", unsafe_allow_html=True)
 
     L, H, cx, cy = 1020, 640, 510, 320            # zone de dessin (px) et centre du cercle
 
