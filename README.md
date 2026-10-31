@@ -1,6 +1,6 @@
-# TelcomCI · Dashboard RH
+# TelcoPeople · Dashboard RH
 
-Dashboard interactif Streamlit de pilotage des ressources humaines de TelcomCI : effectifs, masse salariale, absentéisme, performance, engagement, turnover et risque de départ à 6 mois.
+Dashboard interactif Streamlit de pilotage des ressources humaines de TelcoPeople : effectifs, masse salariale, absentéisme, performance, engagement, turnover et risque de départ à 6 mois.
 
 - Application : `dashboard/app.py`
 - Données : `data/raw/`

@@ -1,4 +1,4 @@
-"""TelcomCI · HR Analytics — dashboard RH sur le modèle « cycle de vie du collaborateur ».
+"""TelcoPeople · HR Analytics — dashboard RH sur le modèle « cycle de vie du collaborateur ».
 
 Une page d'accueil et quinze pages thématiques, appliquées aux données TelcoPeople.
 Lancement local :  streamlit run dashboard/app.py
@@ -18,7 +18,7 @@ from anticipation import (FAMILLES, ORDRE_NIVEAUX, auc_validation, contributions
                           variables_modele)
 from preparation import JOURS_OUVRES_6M, charger, entrainer_modele
 
-st.set_page_config(page_title="TelcomCI · HR Analytics", page_icon="🟡", layout="wide",
+st.set_page_config(page_title="TelcoPeople · HR Analytics", page_icon="🟡", layout="wide",
                    initial_sidebar_state="collapsed")
 
 # ---------------------------------------------------------------------------
@@ -57,10 +57,8 @@ st.markdown(f"""
   .population {{color: #555; font-size: .8rem; background: #FAFAF7; border: 1px solid #EEE; border-radius: 6px;
                padding: 5px 10px; margin: -4px 0 10px 0;}}
   .population b {{color: #222;}}
-  .avertissement {{background: #FFF8E1; border-left: 4px solid {JAUNE}; padding: 10px 14px; border-radius: 4px;
+  .avertissement {{background: #FFF8E1; border: 1px solid #F1E3A6; padding: 10px 14px; border-radius: 4px;
                   font-size: .9rem; color: #333;}}
-  .signal {{border: 1px solid #EEE; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; background: #fff;}}
-  .signal .t {{font-weight: 700;}} .signal .v {{font-size: .88rem;}} .signal .r {{color: #777; font-size: .8rem;}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -292,8 +290,11 @@ def cohorte(periode):
 def p_accueil():
     """Accueil : les pages disposées autour du cercle, chacune cliquable (liens de navigation natifs)."""
     u = auth.utilisateur()
+    # sur la page anneau, on navigue uniquement par les titres autour du cercle : la barre du haut est masquée
+    st.markdown("<style>[data-testid='stTopNavigation'], header nav, header [data-testid='stNavSection'] "
+                "{display:none !important;}</style>", unsafe_allow_html=True)
     h1, h2 = st.columns([4, 1.2], vertical_alignment="center")
-    h1.markdown("<div class='titre-page'><span>TelcomCI</span>HR Analytics</div>", unsafe_allow_html=True)
+    h1.markdown("<div class='titre-page'><span>TelcoPeople</span>HR Analytics</div>", unsafe_allow_html=True)
     with h2:
         st.markdown(f"<div class='note' style='text-align:right'>Connecté : <b>{u['nom']}</b><br>"
                     f"profil {auth.ROLES[u['role']]['libelle']}</div>", unsafe_allow_html=True)
@@ -349,8 +350,7 @@ def p_accueil():
                 st.page_link(pg, label=pg.title)
 
     act = DF[DF["jeu"] == "actuel"]
-    st.markdown(f"<div class='note' style='text-align:center'>Cliquez sur un thème pour ouvrir son tableau de bord, "
-                f"ou utilisez le menu par domaine en haut de page.<br>"
+    st.markdown(f"<div class='note' style='text-align:center'>Cliquez sur un thème pour ouvrir son tableau de bord.<br>"
                 f"Données TelcoPeople : {len(act)} collaborateurs au 31/12/2024, historique semestriel depuis juin 2022, "
                 f"départs connus jusqu'à la cohorte du 30/06/2024. "
                 f"Absentéisme = jours d'absence sur 6 mois ÷ {JOURS_OUVRES_6M} jours ouvrés · "
@@ -545,14 +545,6 @@ def p_diversite():
 # ---------------------------------------------------------------------------
 # 4. Fiche collaborateur
 # ---------------------------------------------------------------------------
-def bloc_signal(item, sens):
-    couleur = "#B03A2E" if sens == "+" else "#2E7D4F"
-    fleche = "▲ augmente le score" if sens == "+" else "▼ nuance le signal"
-    return (f"<div class='signal' style='border-left:4px solid {couleur}'>"
-            f"<div class='t'>{item['famille']} <span class='note'>· {fleche} · intensité {item['intensite']}</span></div>"
-            f"<div class='v'>Collaborateur : <b>{item['valeur']}</b></div><div class='r'>Référence : {item['reference']}</div></div>")
-
-
 def p_fiche():
     _, _, dep = en_tete(7, "Fiche collaborateur", periodes=None, cle="fiche")
     act, contrib = modele_risque()
@@ -578,7 +570,7 @@ def p_fiche():
             f"<div style='background:#FAFAF7;border:1px solid #EEE;border-radius:6px;padding:14px;min-height:430px'>"
             f"<div style='background:{couleur};color:{texte};text-align:center;font-weight:700;border-radius:4px;"
             f"padding:4px'>Niveau de risque : {p['niveau_risque'].lower()}</div>"
-            f"<div style='font-size:3.2rem;text-align:center;margin:8px 0'>👤</div>"
+            f"<div style='font-size:3.2rem;text-align:center;margin:8px 0'>{ {'F': '👩', 'M': '👨'}.get(p['genre'], '👤') }</div>"
             f"<b>{p['id']}</b><br><span class='note'>Identifiant</span><br><br>"
             f"<b>{p['poste']}</b><br><span class='note'>Poste</span><br><br>"
             f"<b>{p['departement']}</b> · {p['grade']} · {p['contrat']}<br><span class='note'>Département · grade · contrat</span><br><br>"
@@ -586,60 +578,57 @@ def p_fiche():
             f"<span class='note'>des collaborateurs au 31/12/2024</span></div>",
             unsafe_allow_html=True)
     with droite:
-        o = st.tabs(["Pourquoi ce signal ?", "Informations", "Poste", "Rémunération", "Absences",
-                     "Performance & engagement"])
+        o = st.tabs(["Informations", "Poste", "Rémunération", "Absences", "Performance & engagement",
+                     "Pourquoi ce signal ?"])
 
         def lignes(rows):
             st.dataframe(pd.DataFrame(rows, columns=["", "Valeur"]), hide_index=True, width="stretch")
-        with o[0]:
+        with o[5]:
             st.markdown(
-                f"<div class='avertissement'>Lors des validations sur les 3 dernières cohortes, <b>{pct(tn['taux'], 0)}</b> des "
+                f"Lors des validations sur les 3 dernières cohortes, <b>{pct(tn['taux'], 0)}</b> des "
                 f"collaborateurs classés « {p['niveau_risque']} » sont effectivement partis dans les 6 mois "
                 f"(entre {pct(tn['taux_min'], 0)} et {pct(tn['taux_max'], 0)} selon la cohorte). "
-                f"C'est un taux de groupe : il ne dit rien des intentions de cette personne.</div>",
+                f"C'est un taux de groupe : il ne dit rien des intentions de cette personne.",
                 unsafe_allow_html=True)
             signaux, nuances, manquants = explication(contrib.loc[k], p, act)
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown("**Ce qui rapproche le score du haut de la distribution**")
-                st.markdown("".join(bloc_signal(x, "+") for x in signaux) or
-                            "<div class='note'>Aucun signal marqué.</div>", unsafe_allow_html=True)
-            with c2:
-                st.markdown("**Ce qui nuance le signal**")
-                st.markdown("".join(bloc_signal(x, "-") for x in nuances) or
-                            "<div class='note'>Aucun élément ne tire le score vers le bas.</div>", unsafe_allow_html=True)
-                st.markdown("**À vérifier humainement**")
-                verif = [f"Donnée non renseignée : {m} (n'est pas comptée comme une valeur faible)." for m in manquants]
-                verif.append("Le contexte récent (changement de poste, de manager, situation personnelle) n'est pas "
-                             "dans les données : seul un échange permet de le connaître.")
-                st.markdown("".join(f"<div class='note' style='margin-bottom:4px'>• {v}</div>" for v in verif),
-                            unsafe_allow_html=True)
-            st.markdown("<div class='note'>Les effets sont mesurés par rapport à un collaborateur moyen de TelcomCI. "
+            tableau = [(x["famille"], "Augmente le score", x["intensite"], x["valeur"], x["reference"]) for x in signaux]
+            tableau += [(x["famille"], "Nuance le signal", x["intensite"], x["valeur"], x["reference"]) for x in nuances]
+            if tableau:
+                st.table(pd.DataFrame(tableau, columns=["Élément", "Effet sur le score", "Intensité",
+                                                        "Valeur du collaborateur", "Référence"]).style.hide(axis="index"))
+            else:
+                st.markdown("<div class='note'>Aucun élément ne se distingue nettement.</div>", unsafe_allow_html=True)
+            verif = [("Donnée non renseignée", f"{m} (n'est pas comptée comme une valeur faible)") for m in manquants]
+            verif.append(("Contexte récent", "changement de poste, de manager, situation personnelle : absent des "
+                                             "données, seul un échange permet de le connaître"))
+            st.markdown("**À vérifier humainement**")
+            st.table(pd.DataFrame(verif, columns=["Point", "Détail"]).style.hide(axis="index"))
+            st.markdown("<div class='note'>Les effets sont mesurés par rapport à un collaborateur moyen de TelcoPeople. "
                         "Ils expliquent le calcul du score ; ce sont des associations statistiques, pas des causes. "
                         "Le genre n'est pas utilisé par ce modèle. Aucune décision défavorable ne peut être fondée "
                         "sur ce score.</div>", unsafe_allow_html=True)
-        with o[1]:
+        with o[0]:
             lignes([("Genre", p["genre"]), ("Âge", f"{nb(p['age'])} ans"), ("Génération", p["generation"]),
                     ("Niveau d'études", p["niveau_etude"]), ("Ville", p["ville_affectation"]), ("Site", p["code_site"])])
-        with o[2]:
+        with o[1]:
             lignes([("Poste", p["poste"]), ("Département", p["departement"]), ("Grade", p["grade"]),
                     ("Contrat", p["contrat"]), ("Ancienneté", f"{nb(p['anciennete'], 1)} ans"),
                     ("Dernière promotion", "Jamais" if p["jamais_promu"] else f"il y a {nb(p['annees_depuis_promotion'], 1)} ans")])
-        with o[3]:
+        with o[2]:
             meme_grade = act[act["grade"] == p["grade"]]
             lignes([("Salaire mensuel", f"{nb(p['salaire_mensuel'])} FCFA"),
                     ("Référence du grade", f"{nb(p['reference_salaire_grade'])} FCFA"),
                     ("Salaire / référence", nb(p["ratio_salaire_reference"], 2)),
                     (f"Médiane du grade {p['grade']} (salaire / référence)", nb(meme_grade["ratio_salaire_reference"].median(), 2)),
                     ("Évolution sur 12 mois", pct(p["taux_evolution_salaire"]))])
-        with o[4]:
+        with o[3]:
             m = pd.DataFrame({"mois": [f"M-{i}" for i in range(5, -1, -1)],
                               "Toutes absences": [p[f"jours_abs_m{i}"] for i in range(6, 0, -1)],
                               "Non justifiées": [p[f"abs_non_just_m{i}"] for i in range(6, 0, -1)]})
             graphique(st, px.bar(m.melt("mois", var_name="type", value_name="jours"), x="mois", y="jours",
                                  color="type", barmode="group", title="Jours d'absence des 6 derniers mois",
                                  color_discrete_map={"Toutes absences": GRIS, "Non justifiées": JAUNE}), 300)
-        with o[5]:
+        with o[4]:
             lignes([("Performance actuelle", nb(p["performance_actuelle"], 2)),
                     ("Performance précédente", nb(p["performance_precedente"], 2)),
                     ("Engagement actuel", nb(p["engagement_actuel"], 2)),
@@ -1123,7 +1112,7 @@ def p_analyse_departs():
             k = st.columns(3)
             for col, l, v in zip(k, ["Arrivées", "Départs", "Effectif"],
                                  [x["arrivee"].sum(), x["target"].sum(), len(x)]):
-                col.markdown(f"<div style='border-left:3px solid {JAUNE};padding-left:8px'>"
+                col.markdown(f"<div>"
                              f"<div class='valeur' style='color:{JAUNE};font-size:1.5rem;font-weight:700'>{nb(v)}</div>"
                              f"<div class='libelle'>{l}</div></div>", unsafe_allow_html=True)
     st.write("")
@@ -1435,7 +1424,7 @@ def p_exports():
             st.session_state["xlsx"] = exports.excel(d, sc, taux, audit(), contexte, nominatif)
         if "xlsx" in st.session_state:
             st.download_button("⬇️ Télécharger le classeur (.xlsx)", st.session_state["xlsx"],
-                               f"TelcomCI_RH_{per.replace(' ', '_')}.xlsx", width="stretch", type="primary",
+                               f"TelcoPeople_RH_{per.replace(' ', '_')}.xlsx", width="stretch", type="primary",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with c2.container(border=True):
         st.markdown("##### 📄 Synthèse PDF")
@@ -1445,7 +1434,7 @@ def p_exports():
             st.session_state["pdf"] = synthese_pdf(d, sc, taux, per, contexte, nominatif)
         if "pdf" in st.session_state:
             st.download_button("⬇️ Télécharger la synthèse (.pdf)", st.session_state["pdf"],
-                               f"TelcomCI_synthese_RH_{per.replace(' ', '_')}.pdf", "application/pdf",
+                               f"TelcoPeople_synthese_RH_{per.replace(' ', '_')}.pdf", "application/pdf",
                                width="stretch", type="primary")
 
 

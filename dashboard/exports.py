@@ -107,7 +107,7 @@ def excel(df, scores, taux_niveaux, qualite, contexte, nominatif):
     """Construit le classeur. `contexte` : dict(periode, departement, utilisateur, role)."""
     cur = df[df["periode"] == contexte["periode"]]
     feuilles = {}
-    lisez = [("Rapport", "Pilotage RH TelcomCI : export des indicateurs"),
+    lisez = [("Rapport", "Pilotage RH TelcoPeople : export des indicateurs"),
              ("Exporté le", datetime.now().strftime("%d/%m/%Y %H:%M")),
              ("Par", f"{contexte['utilisateur']} (profil {contexte['role']})"),
              ("Période de référence", contexte["periode"]),
@@ -205,7 +205,7 @@ def pdf(synthese, kpis, alertes, niveaux, departements, contexte, nominatif):
         canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(colors.HexColor("#5B6472"))
         conf = "Diffusion restreinte DRH" if nominatif else "Document interne · données agrégées"
-        canvas.drawString(2 * cm, 1.2 * cm, f"TelcomCI · Pilotage RH · {conf} · exporté le "
+        canvas.drawString(2 * cm, 1.2 * cm, f"TelcoPeople · Pilotage RH · {conf} · exporté le "
                                              f"{datetime.now().strftime('%d/%m/%Y')} par {contexte['utilisateur']}")
         canvas.drawRightString(A4[0] - 2 * cm, 1.2 * cm, f"Page {doc.page}")
         canvas.setStrokeColor(encre)
@@ -215,8 +215,8 @@ def pdf(synthese, kpis, alertes, niveaux, departements, contexte, nominatif):
 
     sortie = io.BytesIO()
     doc = SimpleDocTemplate(sortie, pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm, topMargin=2 * cm,
-                            bottomMargin=2 * cm, title="Synthèse RH TelcomCI", author=contexte["utilisateur"])
-    elems = [Paragraph("Synthèse RH · TelcomCI", st_titre),
+                            bottomMargin=2 * cm, title="Synthèse RH TelcoPeople", author=contexte["utilisateur"])
+    elems = [Paragraph("Synthèse RH · TelcoPeople", st_titre),
              Paragraph(f"Période : {contexte['periode']} · Périmètre : {contexte['departement']}", st_sous),
              Paragraph("À retenir", st_h), Paragraph(synthese, st_p),
              Paragraph("Indicateurs clés", st_h),
