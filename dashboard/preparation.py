@@ -35,10 +35,11 @@ def nettoyer(df):
     df["departement"] = df["departement"].fillna("INCONNU").str.strip().str.upper().str.replace("DEPT", "DEP", regex=False)
     df["contrat"] = df["contrat"].fillna("INCONNU").str.strip().str.upper().str.replace(".", "", regex=False)
     df["niveau_etude"] = (df["niveau_etude"].fillna("INCONNU").str.strip().str.upper()
-                          .str.replace(" ", "", regex=False).str.replace("BAC2", "BAC+2", regex=False))
-    for c in ["genre", "poste", "grade", "code_site", "source_sirh"]:
+                          .str.replace(" ", "", regex=False).str.replace("BAC2", "BAC+2", regex=False)
+                          .replace({"BAC+2": "Bac+2", "BAC+3": "Bac+3", "BAC+5": "Bac+5", "DOCTORAT": "Doctorat"}))
+    for c in ["genre", "grade", "code_site", "source_sirh"]:
         df[c] = df[c].fillna("INCONNU").astype(str).str.strip().str.upper()
-    df["poste"] = df["poste"].str.title()
+    df["poste"] = df["poste"].fillna("INCONNU").astype(str).str.strip()     # intitulés déjà corrects : conservés
 
     df.loc[df["salaire_mensuel"] <= 0, "salaire_mensuel"] = np.nan
     ratio = df["salaire_mensuel"] / df["reference_salaire_grade"]
@@ -103,6 +104,10 @@ def charger():
                                labels=["<25", "25-29", "30-34", "35-39", "40-44", "45-49", "50+"], right=False)
     df["tranche_anciennete"] = pd.cut(df["anciennete"], [0, 1, 2, 3, 5, 20],
                                       labels=["<1 an", "1-2 ans", "2-3 ans", "3-5 ans", "5 ans +"], right=False)
+    # Affichage : une catégorie manquante s'appelle « Non renseigné » (simple libellé, sans effet sur le modèle)
+    for c in ["genre", "departement", "contrat", "niveau_etude", "ville_affectation", "poste", "grade",
+              "code_site", "source_sirh"]:
+        df[c] = df[c].replace({"INCONNU": "Non renseigné", "Inconnu": "Non renseigné"})
     feats = [c for c in df.columns if c not in A_RETIRER + ["taux_absenteisme", "tranche_age", "tranche_anciennete"]]
     return df, feats
 
