@@ -37,7 +37,7 @@ h1.titre {{font-size: 1.9rem; font-weight: 800; color: {ENCRE}; margin: 0; lette
 .sous-titre {{color: {TEXTE_2}; font-size: .95rem; margin-top: 2px;}}
 
 /* Phrase « À retenir » */
-.retenir {{background: {CARTE}; border: 1px solid {BORD}; border-left: 5px solid {ENCRE}; border-radius: 10px;
+.retenir {{background: {CARTE}; border: 1px solid {BORD}; border-radius: 10px;
           padding: 16px 20px; color: {ENCRE}; font-size: 1.04rem; line-height: 1.55;}}
 .retenir .etiquette {{font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
                      color: {TEXTE_2}; margin-bottom: 4px;}}
