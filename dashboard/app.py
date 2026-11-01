@@ -3,6 +3,8 @@
 Une page d'accueil et quinze pages thématiques, appliquées aux données TelcomCI.
 Lancement local :  streamlit run dashboard/app.py
 """
+import base64
+import re
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -967,38 +969,27 @@ def p_diversite():
 # ---------------------------------------------------------------------------
 # 4. Fiche collaborateur
 # ---------------------------------------------------------------------------
-def avatar(genre, taille=132):
-    """Portrait illustré (dessin original, style à plat) sur fond orange : femme, homme ou silhouette neutre."""
-    peau, cheveux, veste = "#7A4A2A", "#161616", "#2B2B2B"
-    fond = "<rect width='120' height='120' fill='#FF7900'/><circle cx='60' cy='62' r='44' fill='#FF8F2E'/>"
-    corps = (f"<path d='M16 122 C18 101 37 92 60 92 C83 92 102 101 104 122 Z' fill='{veste}'/>"
-             "<path d='M50 92.5 L60 105 L70 92.5 Z' fill='#F4F4F4'/>")
-    cou = f"<rect x='52' y='76' width='16' height='18' rx='6' fill='{peau}'/>"
-    tete = (f"<ellipse cx='42.5' cy='56' rx='3.2' ry='5' fill='{peau}'/><ellipse cx='77.5' cy='56' rx='3.2' ry='5' fill='{peau}'/>"
-            f"<ellipse cx='60' cy='54' rx='17' ry='20' fill='{peau}'/>")
-    visage = ("<circle cx='53.5' cy='55' r='1.9' fill='#141414'/><circle cx='66.5' cy='55' r='1.9' fill='#141414'/>"
-              "<path d='M54.5 64.5 Q60 68.5 65.5 64.5' stroke='#141414' stroke-width='1.7' fill='none' stroke-linecap='round'/>")
-    if genre == "F":
-        arriere = f"<path d='M37 59 C35 33 85 33 83 59 L85 89 C76 95 44 95 35 89 Z' fill='{cheveux}'/>"
-        avant = (f"<path d='M42 54 C42 37 51 32 61 32 C71 32 79 38 78 54 C73 44 64 41 57 42 C51 43 46 47 42 54 Z' "
-                 f"fill='{cheveux}'/>")
-        boucles = "<circle cx='42.5' cy='62' r='2.2' fill='#FF7900'/><circle cx='77.5' cy='62' r='2.2' fill='#FF7900'/>"
-        details = "<path d='M56 98 Q60 101 64 98' stroke='#FF7900' stroke-width='2' fill='none' stroke-linecap='round'/>"
-    elif genre == "M":
-        arriere = ""
-        avant = (f"<path d='M42.5 50 C41 35 50 30 60 30 C70 30 79 35 77.5 50 C74 42 67 39.5 60 39.5 "
-                 f"C53 39.5 46 42 42.5 50 Z' fill='{cheveux}'/>")
-        boucles = ""
-        details = "<path d='M60 104 L56.5 109 L60 121 L63.5 109 Z' fill='#FF7900'/>"
-    else:
-        peau = "#4A4A4A"
-        return (f"<svg viewBox='0 0 120 120' width='{taille}' height='{taille}' aria-hidden='true'><defs><clipPath id='rond'>"
-                f"<circle cx='60' cy='60' r='60'/></clipPath></defs><g clip-path='url(#rond)'>{fond}"
-                f"<path d='M16 122 C18 99 37 90 60 90 C83 90 102 99 104 122 Z' fill='#2B2B2B'/>"
-                f"<circle cx='60' cy='54' r='20' fill='#2B2B2B'/></g></svg>")
+DOSSIER_AVATARS = Path(__file__).with_name("avatars")
+
+
+@st.cache_data
+def _avatars_disponibles():
+    return {g: sorted(DOSSIER_AVATARS.glob(f"{g}*.svg")) for g in ("F", "M")}
+
+
+def avatar(genre, identifiant="", taille=132):
+    """Avatar illustré (DiceBear, style Avataaars) : attribué de façon stable selon l'identifiant et le genre.
+    Genre non renseigné : silhouette neutre."""
+    fichiers = _avatars_disponibles().get(genre) or []
+    if fichiers:
+        f = fichiers[sum(map(ord, str(identifiant))) % len(fichiers)]
+        donnees_svg = base64.b64encode(f.read_bytes()).decode()      # en image : Streamlit filtre les masques SVG
+        return f"<img src='data:image/svg+xml;base64,{donnees_svg}' width='{taille}' height='{taille}' alt=''>"
     return (f"<svg viewBox='0 0 120 120' width='{taille}' height='{taille}' aria-hidden='true'><defs><clipPath id='rond'>"
-            f"<circle cx='60' cy='60' r='60'/></clipPath></defs><g clip-path='url(#rond)'>{fond}{arriere}{cou}{corps}"
-            f"{details}<g transform='translate(0 5)'>{tete}{avant}{visage}{boucles}</g></svg>")
+            f"<circle cx='60' cy='60' r='60'/></clipPath></defs><g clip-path='url(#rond)'>"
+            f"<rect width='120' height='120' fill='#FF7900'/>"
+            f"<path d='M16 122 C18 99 37 90 60 90 C83 90 102 99 104 122 Z' fill='#2B2B2B'/>"
+            f"<circle cx='60' cy='54' r='20' fill='#2B2B2B'/></g></svg>")
 
 
 def indicateurs(groupes, par_ligne=None):
@@ -1047,7 +1038,7 @@ def p_fiche():
             f"<div style='background:#fff;border:1px solid #E6E6E6;border-radius:12px;padding:14px;min-height:430px'>"
             f"<div style='background:{couleur};color:{texte};text-align:center;font-weight:700;border-radius:4px;"
             f"padding:4px'>Niveau de risque : {p['niveau_risque'].lower()}</div>"
-            f"<div style='display:flex;justify-content:center;margin:16px auto 12px auto'>{avatar(p['genre'])}</div>"
+            f"<div style='display:flex;justify-content:center;margin:16px auto 12px auto'>{avatar(p['genre'], p['id'])}</div>"
             f"<b>{p['id']}</b><br><span class='note'>Identifiant</span><br><br>"
             f"<b>{p['poste']}</b><br><span class='note'>Poste</span><br><br>"
             f"<b>{p['departement']}</b> · {p['grade']} · {p['contrat']}<br><span class='note'>Département · grade · contrat</span><br><br>"
