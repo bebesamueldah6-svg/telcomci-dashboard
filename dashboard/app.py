@@ -56,6 +56,26 @@ st.markdown(f"""
   .tuile:hover .t-ico {{color: {ORANGE};}}
   .ico-svg {{display: inline-block; width: 1em; height: 1em; vertical-align: -0.15em;}}
   .ico-svg svg {{width: 100%; height: 100%;}}
+  .indic {{display: flex; gap: 0; background: #fff; border: 1px solid #E6E6E6; border-radius: 12px; padding: 18px 8px;
+          margin: 8px 0 12px 0; flex-wrap: wrap;}}
+  .indic-groupe {{flex: 1 1 0; min-width: 220px; padding: 0 10px;}}
+  .indic-groupe + .indic-groupe {{border-left: 1px solid #E6E6E6;}}
+  .indic-titre {{text-align: center; font-weight: 700; color: #1A1A1A; margin-bottom: 10px;}}
+  .indic-ligne {{display: flex; flex-wrap: wrap; justify-content: space-around; gap: 14px 8px;}}
+  .indic[style] .indic-item {{flex: 0 0 calc(100% / var(--par-ligne) - 12px);}}
+  .indic-item {{flex: 1 1 120px; text-align: center; padding: 6px 4px; border-radius: 10px; transition: background .18s;}}
+  .indic-item:hover {{background: #FFF6EE;}}
+  .indic-ico {{width: 58px; height: 58px; margin: 0 auto 8px auto; color: #4A4A4A; transition: color .18s;}}
+  .indic-item:hover .indic-ico {{color: {ORANGE};}}
+  .indic-ico .ico-svg, .indic-ico .ico-svg svg {{display: block; width: 100%; height: 100%;}}
+  .indic-val {{font-weight: 800; color: #1A1A1A; font-size: 1.05rem; line-height: 1.2;}}
+  .indic-lib {{color: #F16E00; font-size: .85rem; margin-top: 2px;}}
+  .indic-note {{color: #8C8C8C; font-size: .75rem; margin-top: 2px;}}
+  .fiche-liste {{display: grid; grid-template-columns: max-content 18px 1fr; gap: 14px 6px; background: #fff;
+          border: 1px solid #E6E6E6; border-radius: 12px; padding: 20px 24px; margin: 8px 0;}}
+  .fl-lib {{color: #595959;}} .fl-sep {{color: #8C8C8C;}} .fl-val {{font-weight: 700; color: #1A1A1A;}}
+  .pastille-note {{width: fit-content; margin: 8px auto 4px auto; padding: 6px 18px; border-radius: 999px;
+          background: #FFF1E5; border: 1px solid #FFD0A6; color: #333;}}
   .st-key-entete {{background: linear-gradient(100deg, #F2F2F2 0%, #FAFAFA 45%, #FFFFFF 100%); border-radius: 16px;
           padding: 14px 18px 8px 18px; margin-bottom: 10px;}}
   .entete-titre {{display: flex; align-items: center; gap: 14px;}}
@@ -947,6 +967,61 @@ def p_diversite():
 # ---------------------------------------------------------------------------
 # 4. Fiche collaborateur
 # ---------------------------------------------------------------------------
+def avatar(genre, taille=132):
+    """Portrait illustré (dessin original, style à plat) sur fond orange : femme, homme ou silhouette neutre."""
+    peau, cheveux, veste = "#7A4A2A", "#161616", "#2B2B2B"
+    fond = "<rect width='120' height='120' fill='#FF7900'/><circle cx='60' cy='62' r='44' fill='#FF8F2E'/>"
+    corps = (f"<path d='M16 122 C18 101 37 92 60 92 C83 92 102 101 104 122 Z' fill='{veste}'/>"
+             "<path d='M50 92.5 L60 105 L70 92.5 Z' fill='#F4F4F4'/>")
+    cou = f"<rect x='52' y='76' width='16' height='18' rx='6' fill='{peau}'/>"
+    tete = (f"<ellipse cx='42.5' cy='56' rx='3.2' ry='5' fill='{peau}'/><ellipse cx='77.5' cy='56' rx='3.2' ry='5' fill='{peau}'/>"
+            f"<ellipse cx='60' cy='54' rx='17' ry='20' fill='{peau}'/>")
+    visage = ("<circle cx='53.5' cy='55' r='1.9' fill='#141414'/><circle cx='66.5' cy='55' r='1.9' fill='#141414'/>"
+              "<path d='M54.5 64.5 Q60 68.5 65.5 64.5' stroke='#141414' stroke-width='1.7' fill='none' stroke-linecap='round'/>")
+    if genre == "F":
+        arriere = f"<path d='M37 59 C35 33 85 33 83 59 L85 89 C76 95 44 95 35 89 Z' fill='{cheveux}'/>"
+        avant = (f"<path d='M42 54 C42 37 51 32 61 32 C71 32 79 38 78 54 C73 44 64 41 57 42 C51 43 46 47 42 54 Z' "
+                 f"fill='{cheveux}'/>")
+        boucles = "<circle cx='42.5' cy='62' r='2.2' fill='#FF7900'/><circle cx='77.5' cy='62' r='2.2' fill='#FF7900'/>"
+        details = "<path d='M56 98 Q60 101 64 98' stroke='#FF7900' stroke-width='2' fill='none' stroke-linecap='round'/>"
+    elif genre == "M":
+        arriere = ""
+        avant = (f"<path d='M42.5 50 C41 35 50 30 60 30 C70 30 79 35 77.5 50 C74 42 67 39.5 60 39.5 "
+                 f"C53 39.5 46 42 42.5 50 Z' fill='{cheveux}'/>")
+        boucles = ""
+        details = "<path d='M60 104 L56.5 109 L60 121 L63.5 109 Z' fill='#FF7900'/>"
+    else:
+        peau = "#4A4A4A"
+        return (f"<svg viewBox='0 0 120 120' width='{taille}' height='{taille}' aria-hidden='true'><defs><clipPath id='rond'>"
+                f"<circle cx='60' cy='60' r='60'/></clipPath></defs><g clip-path='url(#rond)'>{fond}"
+                f"<path d='M16 122 C18 99 37 90 60 90 C83 90 102 99 104 122 Z' fill='#2B2B2B'/>"
+                f"<circle cx='60' cy='54' r='20' fill='#2B2B2B'/></g></svg>")
+    return (f"<svg viewBox='0 0 120 120' width='{taille}' height='{taille}' aria-hidden='true'><defs><clipPath id='rond'>"
+            f"<circle cx='60' cy='60' r='60'/></clipPath></defs><g clip-path='url(#rond)'>{fond}{arriere}{cou}{corps}"
+            f"{details}<g transform='translate(0 5)'>{tete}{avant}{visage}{boucles}</g></svg>")
+
+
+def indicateurs(groupes, par_ligne=None):
+    """Indicateurs illustrés (icône, valeur, libellé) ; groupes = [(titre ou None, [(icône, valeur, libellé, note)])]."""
+    html = "<div class='indic'>" if not par_ligne else f"<div class='indic' style='--par-ligne:{par_ligne}'>"
+    for titre, items in groupes:
+        html += "<div class='indic-groupe'>" + (f"<div class='indic-titre'>{titre}</div>" if titre else "")
+        html += "<div class='indic-ligne'>"
+        for icone, valeur, libelle, note in items:
+            html += (f"<div class='indic-item'><div class='indic-ico'>{ico(icone)}</div>"
+                     f"<div class='indic-val'>{valeur}</div><div class='indic-lib'>{libelle}</div>"
+                     + (f"<div class='indic-note'>{note}</div>" if note else "") + "</div>")
+        html += "</div></div>"
+    st.markdown(html + "</div>", unsafe_allow_html=True)
+
+
+def liste_alignee(rows):
+    """Champs « libellé : valeur » alignés, à la manière d'une fiche (sans tableau)."""
+    st.markdown("<div class='fiche-liste'>" + "".join(
+        f"<div class='fl-lib'>{a}</div><div class='fl-sep'>:</div><div class='fl-val'>{b}</div>" for a, b in rows)
+        + "</div>", unsafe_allow_html=True)
+
+
 def p_fiche():
     _, _, dep = en_tete(7, "Fiche collaborateur", periodes=None, cle="fiche")
     act, contrib = modele_risque()
@@ -972,9 +1047,7 @@ def p_fiche():
             f"<div style='background:#fff;border:1px solid #E6E6E6;border-radius:12px;padding:14px;min-height:430px'>"
             f"<div style='background:{couleur};color:{texte};text-align:center;font-weight:700;border-radius:4px;"
             f"padding:4px'>Niveau de risque : {p['niveau_risque'].lower()}</div>"
-            f"<div style='width:76px;height:76px;border-radius:50%;background:#000;color:{ORANGE};margin:14px auto;display:flex;"
-            f"align-items:center;justify-content:center'><span class='ico' style='font-size:44px'>"
-            f"{ {'F': 'woman', 'M': 'man'}.get(p['genre'], 'person') }</span></div>"
+            f"<div style='display:flex;justify-content:center;margin:16px auto 12px auto'>{avatar(p['genre'])}</div>"
             f"<b>{p['id']}</b><br><span class='note'>Identifiant</span><br><br>"
             f"<b>{p['poste']}</b><br><span class='note'>Poste</span><br><br>"
             f"<b>{p['departement']}</b> · {p['grade']} · {p['contrat']}<br><span class='note'>Département · grade · contrat</span><br><br>"
@@ -1012,32 +1085,62 @@ def p_fiche():
                         "Le genre n'est pas utilisé par ce modèle. Aucune décision défavorable ne peut être fondée "
                         "sur ce score.</div>", unsafe_allow_html=True)
         with o[0]:
-            lignes([("Genre", p["genre"]), ("Âge", f"{nb(p['age'])} ans"), ("Génération", p["generation"]),
-                    ("Niveau d'études", p["niveau_etude"]), ("Ville", p["ville_affectation"]), ("Site", p["code_site"])])
+            liste_alignee([("Genre", {"F": "Femme", "M": "Homme"}.get(p["genre"], "Non renseigné")),
+                           ("Âge", f"{nb(p['age'])} ans"), ("Génération", p["generation"]),
+                           ("Niveau d'études", p["niveau_etude"]), ("Ville", p["ville_affectation"]),
+                           ("Site", p["code_site"])])
         with o[1]:
-            lignes([("Poste", p["poste"]), ("Département", p["departement"]), ("Grade", p["grade"]),
-                    ("Contrat", p["contrat"]), ("Ancienneté", f"{nb(p['anciennete'], 1)} ans"),
-                    ("Dernière promotion", "Jamais" if p["jamais_promu"] else f"il y a {nb(p['annees_depuis_promotion'], 1)} ans")])
+            promo = "Jamais promu" if p["jamais_promu"] else f"il y a {nb(p['annees_depuis_promotion'], 1)} ans"
+            indicateurs([(None, [("work", p["poste"], "Poste", None),
+                                 ("apartment", p["departement"], "Département", None),
+                                 ("military_tech", p["grade"], "Grade", "cadre" if p["grade"] in ("G4", "G5") else None),
+                                 ("description", p["contrat"], "Contrat", None),
+                                 ("hourglass_bottom", f"{nb(p['anciennete'], 1)} ans", "Ancienneté", None),
+                                 ("upgrade", promo, "Dernière promotion", None)])], par_ligne=3)
         with o[2]:
             meme_grade = act[act["grade"] == p["grade"]]
-            lignes([("Salaire mensuel", f"{nb(p['salaire_mensuel'])} FCFA"),
-                    ("Référence du grade", f"{nb(p['reference_salaire_grade'])} FCFA"),
-                    ("Salaire / référence", nb(p["ratio_salaire_reference"], 2)),
-                    (f"Médiane du grade {p['grade']} (salaire / référence)", nb(meme_grade["ratio_salaire_reference"].median(), 2)),
-                    ("Évolution sur 12 mois", pct(p["taux_evolution_salaire"]))])
+            ratio, med = p["ratio_salaire_reference"], meme_grade["ratio_salaire_reference"].median()
+            evo = p["taux_evolution_salaire"]
+            indicateurs([(None, [
+                ("payments", f"{fcfa(p['salaire_mensuel'])} FCFA", "Salaire mensuel", None),
+                ("balance", f"{fcfa(p['reference_salaire_grade'])} FCFA", f"Référence du grade {p['grade']}", None),
+                ("bar_chart", nb(ratio, 2), "Salaire / référence",
+                 f"médiane du grade : {nb(med, 2)}" + (" · en dessous" if ratio < med else " · au-dessus" if ratio > med else "")),
+                ("trending_up" if evo > 0 else "trending_down" if evo < 0 else "trending_flat", pct(evo),
+                 "Évolution sur 12 mois", None)])])
         with o[3]:
+            taux_dep = pairs["taux_absenteisme"].mean()
+            indicateurs([("6 derniers mois", [
+                            ("event_busy", nb(p["jours_abs_6m"], 1), "Jours d'absence", None),
+                            ("sick", nb(p["abs_non_just_6m"], 1), "Jours non justifiés", None),
+                            ("repeat", nb(p["nb_abs_6m"]), "Absences distinctes", None)]),
+                         ("Comparaison", [
+                            ("schedule", pct(p["taux_absenteisme"], 2), "Taux d'absentéisme", None),
+                            ("groups", pct(taux_dep, 2), f"Moyenne {p['departement']}", None)])])
             m = pd.DataFrame({"mois": [f"M-{i}" for i in range(5, -1, -1)],
                               "Toutes absences": [p[f"jours_abs_m{i}"] for i in range(6, 0, -1)],
                               "Non justifiées": [p[f"abs_non_just_m{i}"] for i in range(6, 0, -1)]})
-            graphique(st, px.bar(m.melt("mois", var_name="type", value_name="jours"), x="mois", y="jours",
-                                 color="type", barmode="group", title="Jours d'absence des 6 derniers mois",
-                                 color_discrete_map={"Toutes absences": GRIS, "Non justifiées": JAUNE}), 300)
+            if m[["Toutes absences", "Non justifiées"]].fillna(0).to_numpy().sum() == 0:
+                st.markdown("<div class='pastille-note'>Aucune absence sur les 6 derniers mois</div>", unsafe_allow_html=True)
+            else:
+              with carte(st):
+                graphique(st, px.bar(m.melt("mois", var_name="type", value_name="jours"), x="mois", y="jours",
+                                     color="type", barmode="group", title="Jours d'absence des 6 derniers mois",
+                                     color_discrete_map={"Toutes absences": GRIS, "Non justifiées": JAUNE})
+                          .update_layout(xaxis_title=None, yaxis_title="jours"), 260)
         with o[4]:
-            lignes([("Performance actuelle", nb(p["performance_actuelle"], 2)),
-                    ("Performance précédente", nb(p["performance_precedente"], 2)),
-                    ("Engagement actuel", nb(p["engagement_actuel"], 2)),
-                    ("Engagement précédent", nb(p["engagement_precedent"], 2)),
-                    (f"Engagement médian {p['departement']}", nb(pairs["engagement_actuel"].median(), 2))])
+            cat = p.get("categorie_perf")
+            cat = cat if isinstance(cat, str) and cat != "nan" else "non évaluée"
+            st.markdown(f"<div class='pastille-note'>Niveau de performance : <b>{cat}</b></div>", unsafe_allow_html=True)
+            def fleche(a, b):
+                return "" if pd.isna(a) or pd.isna(b) else (" ↗" if a > b else " ↘" if a < b else " →")
+            indicateurs([(None, [
+                ("star", nb(p["performance_actuelle"], 2) + fleche(p["performance_actuelle"], p["performance_precedente"]),
+                 "Performance actuelle", "sur 5"),
+                ("history", nb(p["performance_precedente"], 2), "Performance précédente", None),
+                ("mood", nb(p["engagement_actuel"], 2) + fleche(p["engagement_actuel"], p["engagement_precedent"]),
+                 "Engagement actuel", f"précédent : {nb(p['engagement_precedent'], 2)}"),
+                ("groups", nb(pairs["engagement_actuel"].median(), 2), f"Engagement médian {p['departement']}", None)])])
 
 
 # ---------------------------------------------------------------------------
