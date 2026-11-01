@@ -1,7 +1,10 @@
 [theme]
-primaryColor = "#C9A200"
+primaryColor = "#FF7900"
 base = "light"
 font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
 
 [server]
 headless = true

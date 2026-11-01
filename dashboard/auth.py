@@ -83,12 +83,62 @@ def deconnecter():
         del st.session_state[cle]
 
 
+CSS_CONNEXION = """<style>
+header[data-testid="stHeader"] {background: transparent;}
+.block-container {padding-top: 1.5rem !important; padding-bottom: 0 !important; max-width: 1300px;}
+.cx-panneau {background: #000; border-radius: 18px; padding: 48px 46px; min-height: 86vh; color: #fff;
+  display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden;}
+.cx-panneau:after {content: ""; position: absolute; right: -120px; bottom: -120px; width: 380px; height: 380px;
+  border-radius: 50%; border: 46px solid #FF7900; opacity: .9; z-index: 0;}
+.cx-marque {font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em;}
+.cx-marque b {color: #FF7900;}
+.cx-contenu {position: relative; z-index: 1;}
+.cx-pastille {display: inline-block; color: #FF7900; border: 1px solid #FF7900; padding: 4px 12px;
+  border-radius: 999px; font-size: .78rem; font-weight: 600; margin-bottom: 18px;}
+.cx-accroche {font-size: 2.5rem; line-height: 1.15; font-weight: 800; letter-spacing: -.02em; margin: 0 0 14px;}
+.cx-accroche span {color: #FF7900;}
+.cx-sous {color: #CCC; font-size: 1rem; max-width: 460px; line-height: 1.55;}
+.cx-chiffres {display: flex; gap: 40px; margin-top: 34px;}
+.cx-v {display: inline-block; font-size: 1.75rem; font-weight: 800; line-height: 1.1; padding-bottom: 8px;
+  background: linear-gradient(#FF7900, #FF7900) bottom left / 34px 3px no-repeat;}
+.cx-l {font-size: .8rem; color: #AAA; margin-top: 8px;}
+.cx-pied {color: #999; font-size: .78rem; position: relative; z-index: 1; background: #000;
+  padding: 4px 8px 4px 0; width: fit-content;}
+.cx-titre {font-size: 2rem; font-weight: 800; color: #000; letter-spacing: -.02em;}
+.cx-st {color: #6B6B6B; font-size: .95rem; margin: .3rem 0 1.4rem;}
+.cx-droits {background: #FFF4EB; border: 1px solid #FFD9B8; border-radius: 10px; padding: 10px 14px;
+  color: #555; font-size: .85rem; margin: -.2rem 0 1rem;}
+.cx-legal {color: #999; font-size: .78rem; text-align: center; margin-top: 1.6rem;}
+button[data-testid^="stBaseButton-primary"], button[data-testid^="stBaseButton-primary"] p {
+  background: #FF7900 !important; border-color: #FF7900 !important; color: #000 !important; font-weight: 700;}
+button[data-testid^="stBaseButton-primary"]:hover, button[data-testid^="stBaseButton-primary"]:hover p {
+  background: #000 !important; border-color: #000 !important; color: #fff !important;}
+@media (max-width: 760px) {.cx-panneau {display: none;}}
+</style>"""
+
+PROFILS = {":material/badge: DRH": "drh", ":material/apartment: Direction générale": "direction"}
+
+
+def identifiant_du_role(role):
+    """Premier compte configuré pour ce rôle (les identifiants peuvent différer selon les secrets)."""
+    return next((ident for ident, c in comptes().items() if c.get("role") == role), None)
+
+
 def page_connexion():
-    gauche, centre, droite = st.columns([1, 1.25, 1])
-    with centre:
-        st.markdown("<div style='height:6vh'></div>", unsafe_allow_html=True)
-        st.markdown("<div class='titre-page'><span>TelcomCI</span>HR Analytics</div>", unsafe_allow_html=True)
-        st.markdown("<div class='note' style='margin:.4rem 0 1rem'>Tableau de bord de pilotage RH · accès réservé</div>",
+    st.markdown(CSS_CONNEXION, unsafe_allow_html=True)
+    gauche, _, droite = st.columns([1.15, .12, .85], vertical_alignment="center")
+    with gauche:
+        st.markdown("""<div class='cx-panneau'>
+<div class='cx-marque'><b>TelcomCI</b> HR Analytics</div>
+<div class='cx-contenu'><div class='cx-pastille'>Direction des Ressources Humaines</div>
+<div class='cx-accroche'>Pilotez vos effectifs.<br><span>Anticipez les départs.</span></div>
+<div class='cx-sous'>Effectifs, masse salariale, absentéisme, performance et turnover réunis dans un seul tableau de bord, mis à jour chaque semestre.</div>
+<div class='cx-chiffres'><div><div class='cx-v'>1 507</div><div class='cx-l'>collaborateurs</div></div>
+<div><div class='cx-v'>10</div><div class='cx-l'>départements</div></div>
+<div><div class='cx-v'>17</div><div class='cx-l'>analyses</div></div></div></div>
+<div class='cx-pied'>Données au 31/12/2024 · Projet MDSBDIA · INP-HB Yamoussoukro</div></div>""", unsafe_allow_html=True)
+    with droite:
+        st.markdown("<div class='cx-titre'>Connexion</div><div class='cx-st'>Accès réservé · choisissez votre profil</div>",
                     unsafe_allow_html=True)
         if st.session_state.pop("session_expiree", False):
             st.info("Votre session a expiré. Merci de vous reconnecter.")
@@ -96,16 +146,23 @@ def page_connexion():
             st.error("Aucun compte n'est configuré. Ajoutez la section [comptes] dans les secrets de l'application "
                      "(voir dashboard/README.md).")
             return
+        choix = st.segmented_control("Profil", list(PROFILS), default=list(PROFILS)[0], key="profil_connexion",
+                                     label_visibility="collapsed", width="stretch") or list(PROFILS)[0]
+        role = PROFILS[choix]
+        st.markdown(f"<div class='cx-droits'><b>{ROLES[role]['libelle']}</b> · {ROLES[role]['description']}</div>",
+                    unsafe_allow_html=True)
         bloque_jusqua = st.session_state.get("bloque_jusqua", 0)
-        with st.form("connexion", border=True):
-            ident = st.text_input("Identifiant", autocomplete="username")
-            mdp = st.text_input("Mot de passe", type="password", autocomplete="current-password")
-            envoye = st.form_submit_button("Se connecter", type="primary", width="stretch")
+        with st.form("connexion", border=False):
+            mdp = st.text_input("Mot de passe", type="password", placeholder="Votre mot de passe",
+                                autocomplete="current-password")
+            envoye = st.form_submit_button("Se connecter", type="primary", icon=":material/login:", width="stretch")
         if envoye:
             if time.time() < bloque_jusqua:
                 st.error(f"Trop de tentatives. Réessayez dans {int(bloque_jusqua - time.time())} secondes.")
             else:
-                u = verifier(ident, mdp)
+                with st.spinner("Connexion…"):
+                    ident = identifiant_du_role(role)
+                    u = verifier(ident, mdp) if ident else None
                 if u:
                     st.session_state.pop("essais", None)
                     st.session_state["utilisateur"] = u
@@ -117,11 +174,9 @@ def page_connexion():
                     st.session_state["essais"] = 0
                     st.error(f"Trop de tentatives. Connexion bloquée pendant {BLOCAGE} secondes.")
                 else:
-                    st.error("Identifiant ou mot de passe incorrect.")
-        st.markdown("<div class='note' style='margin-top:.8rem'>Deux profils de démonstration : <b>DRH</b> "
-                    "(accès aux données individuelles) et <b>Direction générale</b> (indicateurs agrégés).</div>",
+                    st.error("Mot de passe incorrect.")
+        st.markdown(f"<div class='cx-legal'>Session de {DUREE_SESSION // 3600} h · {ESSAIS_MAX} tentatives maximum</div>",
                     unsafe_allow_html=True)
-
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
