@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+import assistant as moteur
 import auth
 import exports
 import qualite
@@ -2004,41 +2005,149 @@ def trouver_question(texte):
     return -meilleur[1] if meilleur[0] > 0 else None
 
 
+FORMATS_MOTEUR = {"n": lambda v: nb(v), "pct": lambda v: pct(v), "pct2": lambda v: pct(v, 2),
+                  "fcfa": lambda v: f"{fcfa(v)} FCFA", "dec": lambda v: nb(v, 1)}
+ORDRES_MOTEUR = {"tranche_age": ORDRE_AGE, "tranche_anciennete": ORDRE_ANC, "periode": PERIODES,
+                 "grade": ["G1", "G2", "G3", "G4", "G5"], "categorie_perf": ORDRE_PERF}
+
+
+def repondre_moteur(question):
+    """Question libre → (texte, graphique, page) calculés sur les données, ou None si la mesure n'est pas reconnue."""
+    r = moteur.analyser(question, DF, PERIODES, PERIODES_HIST)
+    if r.mesure is None:
+        return None
+    m, f = r.mesure, FORMATS_MOTEUR[r.mesure.format]
+    res = moteur.calculer(r, DF, PERIODES, PERIODES_HIST, ORDRES_MOTEUR)
+    pour = f" ({', '.join(r.libelles_filtres)})" if r.libelles_filtres else ""
+    compris = [f"**{m.libelle}**"] + ([f"filtre : {', '.join(r.libelles_filtres)}"] if r.libelles_filtres else [])
+    if r.repartition:
+        compris.append(f"par {r.repartition[0]}")
+    if not r.repartition or r.repartition[1] != "periode":
+        compris.append(f"au {DATES_LIB[res['periode']]}")
+    lignes = ["<span class='note'>J'ai compris : " + " · ".join(compris) + "</span>"]
+    fig = None
+    if r.repartition:
+        serie, tailles = res["serie"], res["tailles"]
+        petits = [k for k in serie.index if tailles.get(k, 0) < 5]
+        serie = serie.drop(petits)
+        if serie.empty:
+            return "\n\n".join(lignes + ["Aucun groupe assez grand (au moins 5 collaborateurs) pour répondre."]), None, m.page
+        if r.repartition[1] == "periode":
+            lignes.append(f"{m.libelle.capitalize()}{pour} : **{f(serie.iloc[0])}** en {serie.index[0]}, "
+                          f"**{f(serie.iloc[-1])}** en {serie.index[-1]}.")
+            fig = px.line(x=serie.index, y=serie.values, markers=True, title=f"{m.libelle.capitalize()}{pour}",
+                          text=[f(v) for v in serie.values])
+            fig.update_traces(line_color=JAUNE, line_width=3, textposition="top center")
+            fig.update_layout(xaxis_title=None, yaxis_visible=False,
+                              yaxis_range=[serie.min() - (serie.max() - serie.min()) * .15 - 1e-9,
+                                           serie.max() + (serie.max() - serie.min()) * .25 + 1e-9])
+        else:
+            haut, bas = serie.idxmax(), serie.idxmin()
+            premier, second = (bas, haut) if r.sens == "min" else (haut, bas)
+            mot1, mot2 = ("la plus faible", "la plus élevée") if r.sens == "min" else ("la plus élevée", "la plus faible")
+            lignes.append(f"**{premier}** a la valeur {mot1} : **{f(serie[premier])}** "
+                          f"({nb(tailles[premier])} collaborateurs). **{second}** a la valeur {mot2} : "
+                          f"**{f(serie[second])}**.")
+            ordonne = r.repartition[1] in ORDRES_MOTEUR
+            s_aff = serie if ordonne else serie.sort_values()
+            if ordonne:
+                fig = px.bar(x=s_aff.index, y=s_aff.values, text=[f(v) for v in s_aff.values],
+                             title=f"{m.libelle.capitalize()}{pour} par {r.repartition[0]}", color_discrete_sequence=[JAUNE])
+                fig.update_layout(xaxis_title=None, yaxis_visible=False)
+            else:
+                fig = px.bar(x=s_aff.values, y=s_aff.index, orientation="h", text=[f(v) for v in s_aff.values],
+                             title=f"{m.libelle.capitalize()}{pour} par {r.repartition[0]}", color_discrete_sequence=[JAUNE])
+                fig.update_layout(xaxis_visible=False, yaxis_title=None)
+        if petits:
+            lignes.append(f"<span class='note'>Groupes de moins de 5 collaborateurs non affichés : {', '.join(petits)}.</span>")
+    else:
+        v = res["valeur"]
+        if pd.isna(v) or res["n"] == 0:
+            lignes.append("Aucun collaborateur ne correspond à ces critères.")
+        else:
+            phrase = f"{m.libelle.capitalize()}{pour} : **{f(v)}**"
+            if m.cle not in ("effectif",):
+                phrase += f" (sur {nb(res['n'])} collaborateurs)"
+            if "reference" in res and not pd.isna(res["reference"]):
+                if m.cle == "effectif" and res["reference"]:
+                    phrase += f", soit **{pct(v / res['reference'])}** de l'effectif total ({nb(res['reference'])})"
+                else:
+                    phrase += f", contre **{f(res['reference'])}** pour l'ensemble de l'entreprise"
+            lignes.append(phrase + ".")
+            if res["n"] < 10 and m.cle not in ("effectif", "nb_departs", "arrivees"):
+                lignes.append("<span class='note'>Attention : moins de 10 collaborateurs concernés, "
+                              "résultat à interpréter avec prudence.</span>")
+    lignes += [f"<span class='note'>{x}</span>" for x in r.remarques]
+    return "\n\n".join(lignes), fig, m.page
+
+
+def suggestions(question, n=3):
+    """Questions les plus proches (catalogue et exemples) pour une phrase non comprise."""
+    from difflib import SequenceMatcher
+    q = moteur.normaliser(question)
+    candidats = [c for c, *_ in QUESTIONS] + moteur.EXEMPLES
+    mots = set(q.split())
+    def score(c):
+        cn = moteur.normaliser(c)
+        return SequenceMatcher(None, q, cn).ratio() + 0.15 * len(mots & set(cn.split()))
+    return sorted(candidats, key=score, reverse=True)[:n]
+
+
+def poser(question):
+    st.session_state.setdefault("assistant_hist", []).append(question)
+
+
 def p_assistant():
     en_tete(2, "Assistant RH", periodes=None, cle="assistant", avec_departement=False)
     hist = st.session_state.setdefault("assistant_hist", [])
+    hist[:] = [h[0] if isinstance(h, tuple) else h for h in hist]          # ancien format (question, index)
     with st.chat_message("assistant", avatar=":material/insights:"):
-        st.markdown("Bonjour. Je réponds à vos questions sur les effectifs, les salaires, l'absentéisme et les départs, "
-                    f"à partir des données au **{DATES_LIB[PERIODES[-1]]}**. Chaque réponse est calculée directement sur "
-                    "les données du dashboard. Choisissez une question ci-dessous ou écrivez la vôtre.")
-    for i, (question, idx) in enumerate(hist):
+        st.markdown("Bonjour. Je réponds à vos questions sur les effectifs, les salaires, l'absentéisme, la performance et "
+                    f"les départs, à partir des données au **{DATES_LIB[PERIODES[-1]]}**. Chaque réponse est calculée "
+                    "directement sur les données du dashboard, sans service extérieur.\n\n"
+                    "Choisissez une question ci-dessous ou écrivez la vôtre en combinant une **mesure** (effectif, taux de "
+                    "départ, salaire, absentéisme, arrivées, âge, ancienneté, performance…), des **filtres** (DEP04, G3, "
+                    "CDD, femmes, Bouaké, 2023 S1, cadres, moins de 25 ans…) et une **répartition** (par grade, par "
+                    "période, quel département…).")
+    for i, question in enumerate(hist):
         with st.chat_message("user", avatar=":material/person:"):
             st.markdown(question)
         with st.chat_message("assistant", avatar=":material/insights:"):
-            if idx is None:
-                st.markdown("Je ne sais pas encore répondre à cette question. Voici celles que je maîtrise : "
-                            + " · ".join(f"*{q}*" for q, *_ in QUESTIONS))
+            idx = next((k for k, (q, *_) in enumerate(QUESTIONS) if q == question), None)
+            reponse = None
+            if idx is not None:
+                reponse = QUESTIONS[idx][1]()
+            else:
+                reponse = repondre_moteur(question)
+                if reponse is None:
+                    idx = trouver_question(question)
+                    reponse = QUESTIONS[idx][1]() if idx is not None else None
+            if reponse is None:
+                st.markdown("Je n'ai pas compris cette question. Vouliez-vous dire :")
+                with st.container(horizontal=True):
+                    for k, sug in enumerate(suggestions(question)):
+                        st.button(sug, key=f"sug-{i}-{k}", on_click=poser, args=(sug,), icon=":material/subdirectory_arrow_right:")
                 continue
-            texte, fig, page = QUESTIONS[idx][1]()
-            st.markdown(texte)
+            texte, fig, page = reponse
+            st.markdown(texte, unsafe_allow_html=True)
             if fig is not None:
                 with carte(st):
                     graphique(st, fig, 260, False, cliquable=False)
             if page in PAGE:
                 st.page_link(PAGE[page], label=f"Ouvrir la page « {PAGE[page].title} »", icon=":material/arrow_forward:")
+    st.caption("Questions fréquentes")
     choix = st.pills("Questions proposées", [q for q, *_ in QUESTIONS], key=f"q_assistant_{len(hist)}",
                      label_visibility="collapsed")
+    st.caption("Exemples de questions libres")
+    exemple = st.pills("Exemples", moteur.EXEMPLES, key=f"ex_assistant_{len(hist)}", label_visibility="collapsed")
     _, c2 = st.columns([6, 1], vertical_alignment="center")
-    texte = st.chat_input("Écrivez votre question, par exemple : quel département a le plus d'absences ?")
+    texte = st.chat_input("Écrivez votre question, par exemple : taux de départ des CDD par grade")
     if hist and c2.button("Effacer", icon=":material/delete_sweep:", width="stretch", type="tertiary"):
         st.session_state["assistant_hist"] = []
         st.rerun()
-    question = choix or texte
+    question = choix or exemple or texte
     if question:
-        idx = next((i for i, (q, *_) in enumerate(QUESTIONS) if q == question), None)
-        if idx is None:
-            idx = trouver_question(question)
-        hist.append((question, idx))
+        hist.append(question)
         st.rerun()
 
 
