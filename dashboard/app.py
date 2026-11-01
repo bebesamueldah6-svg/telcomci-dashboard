@@ -3,6 +3,7 @@
 Une page d'accueil et quinze pages thématiques, appliquées aux données TelcomCI.
 Lancement local :  streamlit run dashboard/app.py
 """
+from pathlib import Path
 from urllib.parse import urlencode
 
 import numpy as np
@@ -46,20 +47,44 @@ st.markdown(f"""
         letter-spacing: normal; text-transform: none; white-space: nowrap; direction: ltr;
         -webkit-font-feature-settings: 'liga'; font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased;}}
   .tuile {{background: #fff; border: 1px solid #E6E6E6; border-radius: 12px; padding: 14px 16px;
-          height: 100%; min-height: 96px; position: relative;}}
-  .tuile .valeur {{color: {NOIR}; font-size: clamp(1.25rem, 1.7vw, 1.85rem); padding-right: 30px; font-weight: 800; line-height: 1.1; letter-spacing: -.02em;}}
-  .tuile .libelle {{color: #6B6B6B; font-size: .85rem; margin-top: 2px; padding-right: 34px;}}
+          height: 100%; min-height: 96px; position: relative; display: flex; align-items: center; gap: clamp(8px, .9vw, 14px);}}
+  .tuile .t-ico {{flex: 0 0 auto; width: clamp(28px, 2.7vw, 48px); height: clamp(28px, 2.7vw, 48px); color: #2B2B2B;
+          transition: color .18s ease;}}
+  .tuile .t-ico:empty {{display: none;}}
+  .tuile .t-ico .ico-svg, .tuile .t-ico .ico-svg svg {{display: block; width: 100%; height: 100%;}}
+  .tuile .t-corps {{min-width: 0; flex: 1;}}
+  .tuile:hover .t-ico {{color: {ORANGE};}}
+  .ico-svg {{display: inline-block; width: 1em; height: 1em; vertical-align: -0.15em;}}
+  .ico-svg svg {{width: 100%; height: 100%;}}
+  .st-key-entete {{background: linear-gradient(100deg, #F2F2F2 0%, #FAFAFA 45%, #FFFFFF 100%); border-radius: 16px;
+          padding: 14px 18px 8px 18px; margin-bottom: 10px;}}
+  .entete-titre {{display: flex; align-items: center; gap: 14px;}}
+  .entete-nom {{font-size: clamp(1.45rem, 1.9vw, 2.05rem); font-weight: 700; color: #1A1A1A; letter-spacing: -.02em; line-height: 1.1;
+          border-bottom: 3px solid {ORANGE}; padding-bottom: 4px; display: inline-block;}}
+  .entete-nom span {{font-weight: 400; color: #8C8C8C; white-space: nowrap;}}
+  .st-key-filtre-periode [data-testid="stButtonGroup"] button {{min-height: 1.9rem; padding: 0 .55rem; font-size: .8rem;}}
+  .entete-ctx {{color: #6B6B6B; font-size: .82rem; margin-top: 6px;}}
+  .entete-ctx b {{display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px;
+          padding: 0 6px; margin-right: 8px; border-radius: 999px; background: #000; color: {ORANGE}; font-size: .75rem;}}
+  .st-key-entete-outils {{margin-top: -4px; margin-left: 60px;}}
+  .st-key-filtre-periode, .st-key-filtre-dep {{background: #fff; border: 1px solid #E3E3E3; border-radius: 12px;
+          padding: 8px 12px 10px 12px;}}
+  .filtre-titre {{font-size: .78rem; font-weight: 700; color: #1A1A1A; margin-bottom: 2px;}}
+  .st-key-nav-pages div[data-testid="stPageLink"] a, .st-key-nav-pages button {{border: none !important;
+          background: transparent !important; color: #595959 !important;}}
+  .st-key-nav-pages div[data-testid="stPageLink"] a:hover, .st-key-nav-pages button:hover {{color: {ORANGE} !important;
+          background: #FFF1E5 !important;}}
+  .st-key-nav-pages span[data-testid="stIconMaterial"] {{font-size: 1.6rem !important;}}
+  .tuile .valeur {{color: {NOIR}; font-size: clamp(1.1rem, 1.6vw, 1.85rem); white-space: nowrap; font-weight: 800; line-height: 1.1; letter-spacing: -.02em;}}
+  .tuile .libelle {{color: #6B6B6B; font-size: .85rem; margin-top: 2px;}}
   .tuile .delta-pos, .tuile .delta-neg {{display: inline-block; font-size: .75rem; font-weight: 700; border-radius: 999px;
           padding: 1px 8px; margin-top: 6px;}}
   .tuile .delta-pos {{color: #1E7B4C; background: #E6F5EC;}}
   .tuile .delta-neg {{color: #CD3C14; background: #FBEAE5;}}
-  .tuile .icone {{position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 50%;
-          background: #FFF1E5; color: {ORANGE}; display: flex; align-items: center; justify-content: center;
-          font-size: 18px;}}
-  .tuile .icone:empty {{display: none;}}
+
   .bandeau {{background: {NOIR}; color: #fff; font-weight: 700; border-radius: 12px;
             padding: 14px 6px; text-align: center; font-size: .85rem; word-break: keep-all;}}
-  .bandeau .ico {{color: {ORANGE}; font-size: 22px; display: block; margin-bottom: 4px;}}
+  .bandeau .ico, .bandeau .ico-svg {{color: {ORANGE}; font-size: 26px; display: block; margin: 0 auto 4px auto;}}
   button[kind="primary"] {{background: {ORANGE} !important; color: #000 !important; border: none !important;
                            font-weight: 700 !important;}}
   button[kind="primary"]:hover {{background: #000 !important; color: #fff !important;}}
@@ -191,10 +216,27 @@ ICONES = {"👥": "groups", "🚪": "logout", "🧲": "person_add", "👩": "wom
           "🎯": "target", "📝": "edit_note", "📄": "description", "🗂️": "folder", "🛠️": "build", "🔤": "abc"}
 
 
+ICONES_PLEINES = {"hourglass_empty": "hourglass_bottom", "target": "gps_fixed"}
+DOSSIER_ICONES = Path(__file__).with_name("icones")
+
+
+@st.cache_data
+def svg_icone(nom):
+    """Icône Material « pleine » (fichier SVG du dossier icones/, licence Apache 2.0), colorée par le CSS."""
+    f = DOSSIER_ICONES / f"{ICONES_PLEINES.get(nom, nom)}.svg"
+    if not f.exists():
+        return ""
+    return (f.read_text().replace('width="24" height="24"', 'width="100%" height="100%" fill="currentColor"', 1)
+            .replace("<svg ", "<svg aria-hidden='true' ", 1))
+
+
 def ico(e):
-    """Icône Material (police déjà chargée par Streamlit) à la place d'un emoji."""
+    """Icône pleine à la place d'un emoji (repli sur la police d'icônes au trait si le SVG manque)."""
     nom = ICONES.get(e, e)
-    return f"<span class='ico'>{nom}</span>" if nom else ""
+    if not nom:
+        return ""
+    svg = svg_icone(nom)
+    return f"<span class='ico-svg'>{svg}</span>" if svg else f"<span class='ico'>{nom}</span>"
 
 
 @st.dialog("Détail", width="large")
@@ -256,8 +298,9 @@ def tuile(col, libelle, valeur, icone="", delta=None, inverse=False, detail=None
     if delta is not None and not pd.isna(delta):
         bon = (delta >= 0) != inverse
         d = f"<div class='{'delta-pos' if bon else 'delta-neg'}'>{'▲' if delta >= 0 else '▼'} {pct(abs(delta))}</div>"
-    col.markdown(f"<div class='tuile'><span class='icone'>{ico(icone)}</span><div class='valeur'>{valeur}</div>"
-                 f"<div class='libelle'>{libelle}</div>{d}</div>", unsafe_allow_html=True)
+    col.markdown(f"<div class='tuile'><div class='t-ico'>{ico(icone)}</div><div class='t-corps'>"
+                 f"<div class='valeur'>{valeur}</div><div class='libelle'>{libelle}</div>{d}</div></div>",
+                 unsafe_allow_html=True)
     if detail is not None:
         _COMPTEUR_DETAILS[0] += 1
         if col.button("Voir le détail", key=f"detail-{_COMPTEUR_DETAILS[0]}", type="tertiary",
@@ -420,31 +463,51 @@ def population(d, periode):
                 unsafe_allow_html=True)
 
 
+LOGO = ("<svg viewBox='0 0 48 48' width='46' height='46' aria-hidden='true'><rect width='48' height='48' rx='12' "
+        "fill='#000'/><text x='24' y='31' text-anchor='middle' font-family='Source Sans Pro, sans-serif' "
+        "font-size='21' font-weight='800' letter-spacing='-1'><tspan fill='#fff'>T</tspan>"
+        "<tspan fill='#FF7900'>C</tspan></text></svg>")
+
+
 def en_tete(numero, titre, periodes=PERIODES, cle="", avec_departement=True, defaut=None):
-    """Titre (numéro et intitulé du registre), segments Période / Département, navigation, population couverte."""
+    """Bandeau de page : logo, titre et contexte (période, périmètre), filtres, navigation, population couverte."""
     r = page_courante()
     st.session_state["_cle_page"] = cle
     st.session_state["_periodes_page"] = list(periodes or [])
     st.session_state["_dep_page"] = avec_departement
     lire_adresse(cle, periodes, avec_departement)
-    gauche, milieu, droite, nav = st.columns([3, 3, 1.3, 1.2])
-    navigation(nav)
-    gauche.markdown(f"<div class='titre-page'><span>{r['numero']}</span>{r['titre']}</div>", unsafe_allow_html=True)
-    with gauche.container(horizontal=True, vertical_alignment="center", gap="small"):
-        st.markdown(f"<div class='note'>{r['section']}</div>", unsafe_allow_html=True)
-        with st.popover("Définitions", icon=":material/info:", type="tertiary"):
-            st.markdown(AIDE_COMMUNE)
-            if r["url"] in AIDE_PAGES:
-                st.markdown(AIDE_PAGES[r["url"]])
-        partage = st.popover("Partager", icon=":material/share:", type="tertiary")
-    periode = None
-    if periodes:
-        defaut = defaut or periodes[-1]
-        periode = milieu.pills("Période", periodes, default=defaut, key=f"per_{cle}", label_visibility="collapsed")
-        periode = periode or defaut
-    dep = "Tous"
+    with st.container(key="entete"):
+        gauche, milieu, droite, nav = st.columns([3.4, 3.3, 1.3, 1.0], vertical_alignment="center")
+        navigation(nav)
+        zone_titre = gauche.empty()
+        with gauche.container(horizontal=True, vertical_alignment="center", gap="small", key="entete-outils"):
+            with st.popover("Définitions", icon=":material/info:", type="tertiary"):
+                st.markdown(AIDE_COMMUNE)
+                if r["url"] in AIDE_PAGES:
+                    st.markdown(AIDE_PAGES[r["url"]])
+            partage = st.popover("Partager", icon=":material/share:", type="tertiary")
+        periode = None
+        if periodes:
+            defaut = defaut or periodes[-1]
+            with milieu.container(key="filtre-periode"):
+                st.markdown("<div class='filtre-titre'>Période</div>", unsafe_allow_html=True)
+                periode = st.pills("Période", periodes, default=defaut, key=f"per_{cle}", label_visibility="collapsed")
+            periode = periode or defaut
+        dep = "Tous"
+        if avec_departement:
+            with droite.container(key="filtre-dep"):
+                st.markdown("<div class='filtre-titre'>Département</div>", unsafe_allow_html=True)
+                dep = st.selectbox("Département", ["Tous"] + DEPARTEMENTS, key=f"dep_{cle}", label_visibility="collapsed")
+    contexte = [r["section"]]
+    if periode:
+        contexte.append(f"au {DATES_LIB[periode]}")
     if avec_departement:
-        dep = droite.selectbox("Département", ["Tous"] + DEPARTEMENTS, key=f"dep_{cle}")
+        contexte.append("tous les départements" if dep == "Tous" else dep)
+    zone_titre.markdown(
+        f"<div class='entete-titre'>{LOGO}<div><div class='entete-nom'>{r['titre']}"
+        f"{f' <span>· {periode}</span>' if periode else ''}</div>"
+        f"<div class='entete-ctx'><b>{r['numero']}</b>{' · '.join(contexte)}</div></div></div>",
+        unsafe_allow_html=True)
     d = DF if dep == "Tous" else DF[DF["departement"] == dep]
     f = st.session_state.get("filtre_clic")
     if f and f["page"] == cle and f["col"] in d.columns:
