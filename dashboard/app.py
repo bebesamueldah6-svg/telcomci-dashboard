@@ -1,4 +1,4 @@
-"""TelcoPeople · HR Analytics — dashboard RH sur le modèle « cycle de vie du collaborateur ».
+"""TelcomCI · HR Analytics — dashboard RH sur le modèle « cycle de vie du collaborateur ».
 
 Une page d'accueil et quinze pages thématiques, appliquées aux données TelcoPeople.
 Lancement local :  streamlit run dashboard/app.py
@@ -18,7 +18,7 @@ from anticipation import (FAMILLES, ORDRE_NIVEAUX, auc_validation, contributions
                           variables_modele)
 from preparation import JOURS_OUVRES_6M, charger, entrainer_modele
 
-st.set_page_config(page_title="TelcoPeople · HR Analytics", page_icon="🟡", layout="wide",
+st.set_page_config(page_title="TelcomCI · HR Analytics", page_icon="🟡", layout="wide",
                    initial_sidebar_state="collapsed")
 
 # ---------------------------------------------------------------------------
@@ -294,7 +294,7 @@ def p_accueil():
     st.markdown("<style>[data-testid='stTopNavigation'], header nav, header [data-testid='stNavSection'] "
                 "{display:none !important;}</style>", unsafe_allow_html=True)
     h1, h2 = st.columns([4, 1.2], vertical_alignment="center")
-    h1.markdown("<div class='titre-page'><span>TelcoPeople</span>HR Analytics</div>", unsafe_allow_html=True)
+    h1.markdown("<div class='titre-page'><span>TelcomCI</span>HR Analytics</div>", unsafe_allow_html=True)
     with h2:
         st.markdown(f"<div class='note' style='text-align:right'>Connecté : <b>{u['nom']}</b><br>"
                     f"profil {auth.ROLES[u['role']]['libelle']}</div>", unsafe_allow_html=True)

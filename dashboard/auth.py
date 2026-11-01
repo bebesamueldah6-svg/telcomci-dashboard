@@ -87,7 +87,7 @@ def page_connexion():
     gauche, centre, droite = st.columns([1, 1.25, 1])
     with centre:
         st.markdown("<div style='height:6vh'></div>", unsafe_allow_html=True)
-        st.markdown("<div class='titre-page'><span>TelcoPeople</span>HR Analytics</div>", unsafe_allow_html=True)
+        st.markdown("<div class='titre-page'><span>TelcomCI</span>HR Analytics</div>", unsafe_allow_html=True)
         st.markdown("<div class='note' style='margin:.4rem 0 1rem'>Tableau de bord de pilotage RH · accès réservé</div>",
                     unsafe_allow_html=True)
         if st.session_state.pop("session_expiree", False):

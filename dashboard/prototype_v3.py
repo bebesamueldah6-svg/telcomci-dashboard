@@ -11,7 +11,7 @@ import streamlit as st
 
 from preparation import JOURS_OUVRES_6M, charger
 
-st.set_page_config(page_title="TelcoPeople · Pilotage RH", page_icon=":material/diversity_3:", layout="wide")
+st.set_page_config(page_title="TelcomCI · Pilotage RH", page_icon=":material/diversity_3:", layout="wide")
 
 # ---------------------------------------------------------------------------
 # Système de design
@@ -159,7 +159,7 @@ def libelle_date(p):
 def vue_ensemble():
     t, f1, f2 = st.columns([1.5, 2.9, 1.2], vertical_alignment="bottom")
     t.markdown(f"<h1 class='titre'>Vue d'ensemble RH</h1>"
-               f"<div class='sous-titre'>TelcoPeople · Direction RH</div>", unsafe_allow_html=True)
+               f"<div class='sous-titre'>TelcomCI · Direction RH</div>", unsafe_allow_html=True)
     per = f1.segmented_control("Période", PERIODES, default=PERIODES[-1], key="per_ve") or PERIODES[-1]
     dep = f2.selectbox("Département", ["Tous les départements"] + sorted(DF["departement"].unique()), key="dep_ve")
     d = DF if dep.startswith("Tous") else DF[DF["departement"] == dep]
