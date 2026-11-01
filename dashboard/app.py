@@ -182,13 +182,47 @@ def ico(e):
     return f"<span class='ico'>{nom}</span>" if nom else ""
 
 
-def tuile(col, libelle, valeur, icone="", delta=None, inverse=False):
+@st.dialog("Détail", width="large")
+def fenetre_detail(titre, df):
+    st.markdown(f"<div class='titre-page' style='font-size:1.5rem'>{titre}</div>", unsafe_allow_html=True)
+    st.caption(f"{nb(len(df))} collaborateurs")
+    if df.empty:
+        st.info("Aucun collaborateur dans cette sélection.")
+        return
+    cols = st.columns(3)
+    for c, (dim, lib) in zip(cols, [("departement", "Département"), ("grade", "Grade"), ("contrat", "Contrat")]):
+        t = df[dim].astype(str).value_counts().rename_axis(lib).reset_index(name="Effectif")
+        c.dataframe(t, hide_index=True, width="stretch", height=min(38 + 35 * len(t), 300),
+                    column_config={"Effectif": st.column_config.ProgressColumn(
+                        "Effectif", format="%d", min_value=0, max_value=int(t["Effectif"].max()), color="#FF7900")})
+    if auth.peut_voir_nominatif():
+        champs = [c for c in ["id", "poste", "departement", "grade", "contrat", "genre", "anciennete"] if c in df.columns]
+        liste = df[champs].rename(columns={"id": "Identifiant", "poste": "Poste", "departement": "Département",
+                                           "grade": "Grade", "contrat": "Contrat", "genre": "Genre",
+                                           "anciennete": "Ancienneté (ans)"})
+        st.dataframe(liste, hide_index=True, width="stretch", height=300,
+                     column_config={"Ancienneté (ans)": st.column_config.NumberColumn(format="%.1f")})
+        st.download_button("Télécharger la liste (CSV)", liste.to_csv(index=False).encode("utf-8"),
+                           f"{titre.lower().replace(' ', '_')}.csv", "text/csv", icon=":material/download:")
+    else:
+        st.info("La liste nominative est réservée au profil DRH.")
+
+
+_COMPTEUR_DETAILS = [0]
+
+
+def tuile(col, libelle, valeur, icone="", delta=None, inverse=False, detail=None):
     d = ""
     if delta is not None and not pd.isna(delta):
         bon = (delta >= 0) != inverse
         d = f"<div class='{'delta-pos' if bon else 'delta-neg'}'>{'▲' if delta >= 0 else '▼'} {pct(abs(delta))}</div>"
     col.markdown(f"<div class='tuile'><span class='icone'>{ico(icone)}</span><div class='valeur'>{valeur}</div>"
                  f"<div class='libelle'>{libelle}</div>{d}</div>", unsafe_allow_html=True)
+    if detail is not None:
+        _COMPTEUR_DETAILS[0] += 1
+        if col.button("Voir le détail", key=f"detail-{_COMPTEUR_DETAILS[0]}", type="tertiary",
+                      icon=":material/open_in_full:"):
+            fenetre_detail(libelle, detail)
 
 
 def fig_style(fig, hauteur=290, legende=True):
@@ -213,8 +247,63 @@ def fig_style(fig, hauteur=290, legende=True):
     return fig
 
 
-def graphique(conteneur, fig, hauteur=290, legende=True):
-    conteneur.plotly_chart(fig_style(fig, hauteur, legende), width="stretch", config={"displayModeBar": False})
+# --- Filtrage par clic sur les graphiques -------------------------------------------------------------
+DIMENSIONS = {"departement": "Département", "grade": "Grade", "tranche_age": "Tranche d'âge", "contrat": "Contrat",
+              "ville_affectation": "Ville", "genre": "Genre", "tranche_anciennete": "Ancienneté",
+              "generation": "Génération", "niveau_etude": "Niveau d'études", "categorie_perf": "Performance",
+              "tranche_salaire": "Tranche de salaire"}
+ALIAS_CLIC = {"Femmes": "F", "Hommes": "M"}
+_COMPTEUR_GRAPHIQUES = [0]          # remis à zéro à chaque exécution du script : clés stables d'une exécution à l'autre
+
+
+def _valeurs_dimensions():
+    vals = {c: set(DF[c].dropna().astype(str).unique()) for c in DIMENSIONS if c in DF.columns}
+    toutes = [v for vs in vals.values() for v in vs]
+    ambigues = {v for v in toutes if toutes.count(v) > 1}          # ex. « Non renseigné » : on ne devine pas
+    return {c: vs - ambigues for c, vs in vals.items()}
+
+
+def clic_graphique(cle_graph):
+    """Rappel du clic : la valeur cliquée devient un filtre (période, département, ou autre dimension)."""
+    etat = st.session_state.get(cle_graph)
+    try:
+        points = etat["selection"]["points"]
+    except (KeyError, TypeError):
+        points = []
+    if not points:
+        return
+    p = points[0]
+    cle_page = st.session_state.get("_cle_page", "")
+    for brut in (p.get("label"), p.get("x"), p.get("y")):
+        if brut is None:
+            continue
+        v = ALIAS_CLIC.get(str(brut), str(brut))
+        if v in st.session_state.get("_periodes_page", []):
+            st.session_state[f"per_{cle_page}"] = v
+            break
+        col = next((c for c, vs in VALEURS_DIM.items() if v in vs), None)
+        if col:
+            if col == "departement" and st.session_state.get("_dep_page"):
+                st.session_state[f"dep_{cle_page}"] = v
+            else:
+                st.session_state["filtre_clic"] = {"page": cle_page, "col": col, "val": v}
+            st.toast(f"Filtre appliqué : {DIMENSIONS.get(col, col)} = {v}", icon=":material/filter_alt:")
+            break
+    st.session_state["_gen_graph"] = st.session_state.get("_gen_graph", 0) + 1     # efface la sélection affichée
+
+
+def graphique(conteneur, fig, hauteur=290, legende=True, cliquable=True):
+    fig = fig_style(fig, hauteur, legende)
+    if not cliquable:
+        conteneur.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        return
+    _COMPTEUR_GRAPHIQUES[0] += 1
+    cle = f"g{st.session_state.get('_gen_graph', 0)}-{st.session_state.get('_cle_page', '')}-{_COMPTEUR_GRAPHIQUES[0]}"
+    conteneur.plotly_chart(fig, width="stretch", config={"displayModeBar": False}, key=cle,
+                           on_select=lambda: clic_graphique(cle), selection_mode="points")
+
+
+VALEURS_DIM = _valeurs_dimensions()
 
 
 FORMATS_ANNEAU = {
@@ -294,10 +383,18 @@ def population(d, periode):
 def en_tete(numero, titre, periodes=PERIODES, cle="", avec_departement=True, defaut=None):
     """Titre (numéro et intitulé du registre), segments Période / Département, navigation, population couverte."""
     r = page_courante()
+    st.session_state["_cle_page"] = cle
+    st.session_state["_periodes_page"] = list(periodes or [])
+    st.session_state["_dep_page"] = avec_departement
     gauche, milieu, droite, nav = st.columns([3, 3, 1.3, 1.2])
     navigation(nav)
-    gauche.markdown(f"<div class='titre-page'><span>{r['numero']}</span>{r['titre']}</div>"
-                    f"<div class='note'>{r['section']}</div>", unsafe_allow_html=True)
+    gauche.markdown(f"<div class='titre-page'><span>{r['numero']}</span>{r['titre']}</div>", unsafe_allow_html=True)
+    with gauche.container(horizontal=True, vertical_alignment="center", gap="small"):
+        st.markdown(f"<div class='note'>{r['section']}</div>", unsafe_allow_html=True)
+        with st.popover("Définitions", icon=":material/info:", type="tertiary"):
+            st.markdown(AIDE_COMMUNE)
+            if r["url"] in AIDE_PAGES:
+                st.markdown(AIDE_PAGES[r["url"]])
     periode = None
     if periodes:
         defaut = defaut or periodes[-1]
@@ -307,11 +404,47 @@ def en_tete(numero, titre, periodes=PERIODES, cle="", avec_departement=True, def
     if avec_departement:
         dep = droite.selectbox("Département", ["Tous"] + DEPARTEMENTS, key=f"dep_{cle}")
     d = DF if dep == "Tous" else DF[DF["departement"] == dep]
+    f = st.session_state.get("filtre_clic")
+    if f and f["page"] == cle and f["col"] in d.columns:
+        d = d[d[f["col"]].astype(str) == f["val"]]
+        st.button(f"{DIMENSIONS.get(f['col'], f['col'])} : {f['val']}", icon=":material/close:", key=f"retirer_{cle}",
+                  help="Retirer ce filtre", on_click=lambda: st.session_state.pop("filtre_clic", None))
     if periode:
         population(d, periode)
     else:
         st.write("")
     return d, periode, dep
+
+
+AIDE_COMMUNE = """**Comment lire cette page**
+- **Période** : situation au 30/06 (S1) ou au 31/12 (S2) de l'année.
+- **Départ** : départ dans les 6 mois suivant la date de référence (connu jusqu'à la cohorte 2024 S1).
+- **Arrivée** : embauche dans les 6 mois précédant la date de référence.
+- **Absentéisme** : jours d'absence sur 6 mois ÷ 130 jours ouvrés.
+
+**Astuce** : cliquez sur une barre ou une part d'un graphique pour filtrer toute la page
+(département, grade, âge, contrat, ville…). Le filtre s'affiche sous le titre, cliquez dessus pour le retirer."""
+
+AIDE_PAGES = {
+    "vue-ensemble": "**Cette page** : les grands équilibres (effectif, diversité, recrutements, départs) en un coup d'œil.",
+    "demographie": "**Cette page** : la structure de l'effectif. « Voir le détail » sous une carte ouvre la liste correspondante.",
+    "diversite": "**Cette page** : répartition par génération, genre et niveau d'études. Génération Z : nés après 1996.",
+    "tendances": "**Cette page** : évolution semestrielle depuis juin 2022. Cliquez sur une période pour la sélectionner.",
+    "arrivees": "**Cette page** : profil des personnes embauchées dans les 6 derniers mois.",
+    "profil-departement": "**Cette page** : synthèse d'un département comparé à l'entreprise.",
+    "fiche-collaborateur": "**Cette page** : réservée au profil DRH. Le score est un signal statistique, pas une prédiction individuelle.",
+    "salaires": "**Cette page** : salaires mensuels bruts en FCFA. Médiane par grade avec 1er et 3e quartiles.",
+    "equite-salariale": "**Cette page** : écart H − F à grade et département comparables.",
+    "absenteisme": "**Cette page** : taux = jours d'absence sur 6 mois ÷ 130 jours ouvrés.",
+    "absences-departement": "**Cette page** : jours d'absence détaillés par département, justifiés ou non.",
+    "performance": "**Cette page** : dernière évaluation connue (Insuffisante → Excellente).",
+    "analyse-departs": "**Cette page** : taux de départ à 6 mois par cohorte historique.",
+    "caracteristiques-departs": "**Cette page** : qui sont les personnes parties, comparées à celles restées.",
+    "anticipation": "**Cette page** : niveaux de risque issus du modèle (AUC ≈ 0,72 en validation temporelle). "
+                    "Cliquez sur une ligne de la liste pour ouvrir la fiche.",
+    "qualite-donnees": "**Cette page** : corrections appliquées aux données brutes avant analyse.",
+    "exports": "**Cette page** : téléchargement des indicateurs (Excel) et de la synthèse (PDF).",
+}
 
 
 def precedente(periode, liste=PERIODES):
@@ -564,9 +697,9 @@ def p_demographie():
     coh = cohorte(per)
     hc = d[(d["periode"] == coh) & (d["jeu"] == "historique")]
     c = st.columns([1, 1, 1, 1.2, 1, 1, 1.2])
-    tuile(c[0], "Effectif", nb(len(cur)), "👥")
-    tuile(c[1], "Arrivées", nb(cur["arrivee"].sum()), "🧲")
-    tuile(c[2], f"Départs ({coh})", nb(hc["target"].sum()), "🚪")
+    tuile(c[0], "Effectif", nb(len(cur)), "👥", detail=cur)
+    tuile(c[1], "Arrivées", nb(cur["arrivee"].sum()), "🧲", detail=cur[cur["arrivee"] == 1])
+    tuile(c[2], f"Départs ({coh})", nb(hc["target"].sum()), "🚪", detail=hc[hc["target"] == 1])
     g = cur["genre"].value_counts(normalize=True)
     tuile(c[3], "Femmes · Hommes", f"{pct(g.get('F', 0), 0)} · {pct(g.get('M', 0), 0)}", "⚥")
     tuile(c[4], "Ancienneté moy.", nb(cur["anciennete"].mean(), 1), "⏳")
@@ -819,7 +952,7 @@ def p_arrivees():
     cur = d[d["periode"] == per]
     nv = cur[cur["arrivee"] == 1]
     c = st.columns([1, 1.3, 1, 1])
-    tuile(c[0], "Arrivées (6 derniers mois)", nb(len(nv)), "🧲")
+    tuile(c[0], "Arrivées (6 derniers mois)", nb(len(nv)), "🧲", detail=nv)
     tuile(c[1], "Femmes parmi les arrivées", pct((nv["genre"] == "F").mean()), "👩")
     tuile(c[2], "Arrivées par mois", nb(len(nv) / 6, 1), "📅")
     tuile(c[3], "En CDI", pct((nv["contrat"] == "CDI").mean()), "📝")
@@ -919,7 +1052,8 @@ def p_salaires():
         t = t[t["effectif"] >= 5].sort_values("moyenne", ascending=False).head(10).reset_index()
         st.dataframe(t.rename(columns={"poste": "Poste", "moyenne": "Salaire moyen (FCFA)", "effectif": "Effectif"}),
                      hide_index=True, width="stretch", height=250,
-                     column_config={"Salaire moyen (FCFA)": st.column_config.NumberColumn(format="%.0f")})
+                     column_config={"Salaire moyen (FCFA)": st.column_config.ProgressColumn(
+                         format="%.0f", min_value=0, max_value=float(t["moyenne"].max()), color="#FF7900")})
 
 
 # ---------------------------------------------------------------------------
@@ -1162,7 +1296,7 @@ def p_profil_departs():
     hc = d[d["periode"] == per]
     partis = hc[hc["target"] == 1]
     c = st.columns(3)
-    tuile(c[0], "Départs dans les 6 mois", nb(len(partis)), "🚪")
+    tuile(c[0], "Départs dans les 6 mois", nb(len(partis)), "🚪", detail=partis)
     tuile(c[1], "Dont CDI", nb((partis["contrat"] == "CDI").sum()), "📝")
     tuile(c[2], "Dont femmes", nb((partis["genre"] == "F").sum()), "👩")
     st.write("")
@@ -1218,7 +1352,7 @@ def p_analyse_departs():
     h = d[d["jeu"] == "historique"]
     hc = h[h["periode"] == per]
     c = st.columns([1, 1, 1, 1, 2.2])
-    tuile(c[0], "Taux de départ", pct(hc["target"].mean()), "🚪")
+    tuile(c[0], "Taux de départ", pct(hc["target"].mean()), "🚪", detail=hc[hc["target"] == 1])
     tuile(c[1], "Taux CDI", pct(hc.loc[hc["contrat"] == "CDI", "target"].mean()), "📝")
     tuile(c[2], "Taux CDD", pct(hc.loc[hc["contrat"] == "CDD", "target"].mean()), "⏱️")
     tuile(c[3], "Taux des cadres (G4-G5)", pct(hc.loc[hc["cadre"] == 1, "target"].mean()), "👔")
@@ -1374,17 +1508,24 @@ def p_anticipation():
     tab = x.sort_values("probabilite", ascending=False)[
         ["id", "niveau_risque", "probabilite", "departement", "poste", "grade", "contrat", "facteurs"]].copy()
     tab["centile"] = ((1 - x.sort_values("probabilite", ascending=False)["rang_haut"] - 1 / len(act)) * 100).values
-    st.dataframe(tab.style.map(lambda v: f"background-color:{COULEURS_NIVEAU.get(v, '#fff')};"
+    sel = st.dataframe(tab.style.map(lambda v: f"background-color:{COULEURS_NIVEAU.get(v, '#fff')};"
                                          f"color:{'#fff' if v == 'Très élevé' else '#222'}", subset=["niveau_risque"]),
-                 hide_index=True, width="stretch", height=380,
+                 hide_index=True, width="stretch", height=380, on_select="rerun", selection_mode="single-row",
+                 key="liste_antic",
                  column_order=["id", "niveau_risque", "centile", "probabilite", "departement", "poste", "grade",
                                "contrat", "facteurs"],
                  column_config={"id": "Identifiant", "niveau_risque": "Niveau",
                                 "centile": st.column_config.NumberColumn("Plus élevé que (%)", format="%.1f",
                                                                          help="Part de l'effectif ayant un score plus faible"),
-                                "probabilite": st.column_config.NumberColumn("Probabilité estimée", format="%.2f"),
+                                "probabilite": st.column_config.ProgressColumn("Probabilité estimée", format="%.2f",
+                                                                               min_value=0.0, max_value=1.0, color="#FF7900"),
                                 "departement": "Département", "poste": "Poste", "grade": "Grade", "contrat": "Contrat",
                                 "facteurs": st.column_config.TextColumn("Principaux signaux", width="large")})
+    lignes = sel.selection.rows if sel else []
+    if lignes:                                  # clic sur une ligne : ouverture directe de la fiche
+        st.session_state["fiche_id"] = tab.iloc[lignes[0]]["id"]
+        st.switch_page(PAGE["fiche-collaborateur"])
+    st.caption("Cliquez sur une ligne pour ouvrir la fiche du collaborateur.")
     o1, o2, o3 = st.columns([2, 1, 1], vertical_alignment="bottom")
     cible = o1.selectbox("Ouvrir la fiche de", tab["id"].tolist() or ["—"], key="cible_fiche")
     if o2.button("Ouvrir la fiche ➜", width="stretch", disabled=not len(tab)):
@@ -1417,8 +1558,8 @@ def p_profil_departement():
         with g:
             if vue == "Vue d'ensemble":
                 k = st.columns(3)
-                tuile(k[0], "Effectif", nb(len(cur)), "👥")
-                tuile(k[1], "Arrivées", nb(cur["arrivee"].sum()), "🧲")
+                tuile(k[0], "Effectif", nb(len(cur)), "👥", detail=cur)
+                tuile(k[1], "Arrivées", nb(cur["arrivee"].sum()), "🧲", detail=cur[cur["arrivee"] == 1])
                 tuile(k[2], "Taux d'absentéisme", pct(cur["taux_absenteisme"].mean(), 2), "🤒")
                 with st.container(border=True):
                     ab = d.groupby("periode")["taux_absenteisme"].mean()
@@ -1433,7 +1574,7 @@ def p_profil_departement():
                     graphique(st, fig, 280)
             elif vue == "Analyse des départs":
                 k = st.columns(3)
-                tuile(k[0], f"Départs ({coh})", nb(hc["target"].sum()), "🚪")
+                tuile(k[0], f"Départs ({coh})", nb(hc["target"].sum()), "🚪", detail=hc[hc["target"] == 1])
                 tuile(k[1], "Taux de départ", pct(hc["target"].mean()), "📉")
                 tuile(k[2], "Taux entreprise", pct(he["target"].mean()), "🏢")
                 with st.container(border=True):
