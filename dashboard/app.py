@@ -310,12 +310,16 @@ def p_accueil():
 
     pages = ORDRE[1:]
     infos = REGISTRE_VISIBLE
+    replies = st.session_state.setdefault("domaines_replies", set())
+    # proposition : ?repli=fixe (les pastilles gardent leur place) ou ?repli=repartir (elles se répartissent)
+    repartir = st.query_params.get("repli", "fixe") == "repartir"
     sections = []
     for r in infos:
         if not sections or sections[-1][0] != r["section"]:
             sections.append([r["section"], 0])
         sections[-1][1] += 1
-    poids = [max(n, 2) for _, n in sections]
+    replie = [nom in replies for nom, _ in sections]
+    poids = [(1.3 if (rep and repartir) else max(n, 2)) for (_, n), rep in zip(sections, replie)]
     pas = (360 - ECART * len(sections)) / sum(poids)
 
     def pt(r, a):
@@ -325,26 +329,32 @@ def p_accueil():
         (x0, y0), (x1, y1) = pt(r, a0), pt(r, a1)
         return f"M {x0:.1f} {y0:.1f} A {r} {r} 0 {1 if a1 - a0 > 180 else 0} 1 {x1:.1f} {y1:.1f}"
 
-    svg, angles, sect_de = [], [], []
+    svg, angles, sect_de, centres = [], [], [], []
     a = -90 - (poids[0] * pas) / 2               # le premier domaine (Pilotage) centré en haut
-    for k, ((nom, n), w) in enumerate(zip(sections, poids)):
+    for k, ((nom, n), w, rep) in enumerate(zip(sections, poids, replie)):
         a0, a1 = a, a + w * pas
         coul = COUL_SECTION.get(nom, "#999")
-        svg.append(f"<path d='{arc(R, a0, a1)}' fill='none' stroke='{coul}' stroke-width='{EP}' stroke-linecap='round'/>")
-        # nom du domaine écrit le long de l'anneau, à l'extérieur
+        if rep:                                   # domaine replié : segment en pointillés
+            svg.append(f"<path d='{arc(R, a0, a1)}' fill='none' stroke='{coul}' stroke-width='10' stroke-linecap='round'"
+                       f" stroke-dasharray='0.1 16' opacity='.9'/>")
+        else:
+            svg.append(f"<path d='{arc(R, a0, a1)}' fill='none' stroke='{coul}' stroke-width='{EP}' stroke-linecap='round'/>")
         bas = 0 < ((a0 + a1) / 2) % 360 < 180
         chemin = arc(R + 30, a1, a0).replace(" 0 1 ", " 0 0 ") if bas else arc(R + 30, a0, a1)
+        libelle = f"{nom.upper()} +{n}" if rep else nom.upper()
         svg.append(f"<path id='dom{k}' d='{chemin}' fill='none'/>"
                    f"<text font-size='10.5' font-weight='700' letter-spacing='1.2' fill='{ORANGE if nom == 'Turnover' else '#8C8C8C'}'"
                    f" font-family='Inter, sans-serif' dy='{8 if bas else 0}'><textPath href='#dom{k}' startOffset='50%' text-anchor='middle'>"
-                   f"{nom.upper()}</textPath></text>")
+                   f"{libelle}</textPath></text>")
+        centres.append(pt(R + 30, (a0 + a1) / 2))
         for j in range(n):
             angles.append(a0 + (j + .5) * (w * pas) / n)
             sect_de.append(nom)
         a = a1 + ECART
-    # repères : point sur l'anneau + trait vers l'étiquette
     RX, RY = 345, 300
     for ang, nom in zip(angles, sect_de):
+        if nom in replies:
+            continue
         (x0, y0), (x1, y1) = pt(R + EP / 2 + 40, ang), (cx + (RX - 8) * np.cos(np.radians(ang)),
                                                        cy + (RY - 8) * np.sin(np.radians(ang)))
         coul = ORANGE if nom == "Turnover" else "#C8C8C8"
@@ -360,14 +370,17 @@ def p_accueil():
     svg = f"<svg width='{L}' height='{H}'>{''.join(svg)}</svg>"
 
     regles = []
-    for i, (ang, nom) in enumerate(zip(angles, sect_de)):
+    for i, (ang, nom, info) in enumerate(zip(angles, sect_de, infos)):
         x, y = cx + RX * np.cos(np.radians(ang)), cy + RY * np.sin(np.radians(ang))
         c = np.cos(np.radians(ang))
         t = "translate(-50%,-50%)" if abs(c) < .12 else "translate(0,-50%)" if c > 0 else "translate(-100%,-50%)"
-        regles.append(f".st-key-cercle-{i} {{left:{x:.0f}px; top:{y:.0f}px; transform:{t};}}")
+        regles.append(f".st-key-cercle-{i} {{left:{x:.0f}px; top:{y:.0f}px; transform:{t};}}"
+                      f".st-key-cercle-{i} div[data-testid='stPageLink'] a::before {{content:'{info['numero']}';}}")
         if nom == "Turnover":
             regles.append(f".st-key-cercle-{i} div[data-testid='stPageLink'] a::before {{background:{ORANGE} !important;"
                           f" color:#000 !important;}}")
+    for k, (x, y) in enumerate(centres):
+        regles.append(f".st-key-dom-{k} {{left:{x:.0f}px; top:{y:.0f}px; transform:translate(-50%,-50%);}}")
     st.markdown(f"""<style>
   .acc-marque {{font-size: 1.9rem; font-weight: 800; letter-spacing: -.02em; color: #000;}}
   .acc-marque b {{color: {ORANGE};}}
@@ -377,25 +390,38 @@ def p_accueil():
   .st-key-deco_accueil button {{border-radius: 999px; border-color: #DDD;}}
   .st-key-deco_accueil button:hover {{border-color: #000; color: #000;}}
   .st-key-cercle-zone {{position:relative; width:{L}px; height:{H}px !important; min-height:{H}px !important;
-                       margin:0 auto; display:block !important; counter-reset: numero;}}
+                       margin:0 auto; display:block !important;}}
   .st-key-cercle-svg {{position:absolute; left:0; top:0;}}
-  div[class*="st-key-cercle-"]:not(.st-key-cercle-zone):not(.st-key-cercle-svg) {{position:absolute;
-       width:max-content !important; z-index:2;}}
+  div[class*="st-key-cercle-"]:not(.st-key-cercle-zone):not(.st-key-cercle-svg),
+  div[class*="st-key-dom-"] {{position:absolute; width:max-content !important; z-index:2;}}
+  div[class*="st-key-dom-"] button {{opacity:0; width:120px; min-height:26px !important; height:26px; padding:0;
+       cursor:pointer;}}
   .st-key-cercle-zone div[data-testid="stPageLink"] a {{background:#fff; border:1px solid #E6E6E6; border-radius:999px;
-       padding:4px 14px 4px 4px; gap:9px; font-weight:600; transition: border-color .15s, box-shadow .15s;}}
+       padding:4px 14px 4px 4px; gap:9px; font-weight:600; transition: background .15s, border-color .15s;}}
   .st-key-cercle-zone div[data-testid="stPageLink"] a span[data-testid="stIconMaterial"] {{color:#8C8C8C;}}
-  .st-key-cercle-zone div[data-testid="stPageLink"] a::before {{counter-increment: numero; content: counter(numero);
+  .st-key-cercle-zone div[data-testid="stPageLink"] a::before {{
        background:#000; color:#fff; font-weight:700; border-radius:50%; width:26px; height:26px; display:inline-flex;
        align-items:center; justify-content:center; font-size:.78rem; flex-shrink:0;}}
-  .st-key-cercle-zone div[data-testid="stPageLink"] a:hover {{border-color:{ORANGE}; box-shadow:0 4px 14px rgba(255,121,0,.18);
-       background:#fff;}}
-  .st-key-cercle-zone div[data-testid="stPageLink"] a:hover::before {{background:{ORANGE}; color:#000;}}
   {''.join(regles)}
+  .st-key-cercle-zone div[data-testid="stPageLink"] a:hover {{background:{ORANGE}; border-color:{ORANGE};}}
+  .st-key-cercle-zone div[data-testid="stPageLink"] a:hover p,
+  .st-key-cercle-zone div[data-testid="stPageLink"] a:hover span[data-testid="stIconMaterial"] {{color:#000 !important;}}
+  .st-key-cercle-zone div[data-testid="stPageLink"] a:hover::before {{background:#000 !important; color:{ORANGE} !important;}}
 </style>""", unsafe_allow_html=True)
+
+    def basculer(nom):
+        replies.symmetric_difference_update({nom})
+
     with st.container(key="cercle-zone"):
         with st.container(key="cercle-svg"):
             st.markdown(svg, unsafe_allow_html=True)
-        for i, pg in enumerate(pages):
+        for k, (nom, _) in enumerate(sections):
+            with st.container(key=f"dom-{k}"):
+                st.button(nom, key=f"btn-dom-{k}", on_click=basculer, args=(nom,),
+                          help=("Déplier" if nom in replies else "Replier") + f" « {nom} »")
+        for i, (pg, nom) in enumerate(zip(pages, sect_de)):
+            if nom in replies:
+                continue
             with st.container(key=f"cercle-{i}"):
                 st.page_link(pg, label=pg.title)
 
