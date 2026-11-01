@@ -18,46 +18,59 @@ from anticipation import (FAMILLES, ORDRE_NIVEAUX, auc_validation, contributions
                           variables_modele)
 from preparation import JOURS_OUVRES_6M, charger, entrainer_modele
 
-st.set_page_config(page_title="TelcomCI · HR Analytics", page_icon="🟡", layout="wide",
+st.set_page_config(page_title="TelcomCI · HR Analytics", page_icon=":material/insights:", layout="wide",
                    initial_sidebar_state="collapsed")
 
 # ---------------------------------------------------------------------------
-# Charte graphique : jaune et gris
+# Charte graphique : inspirée d'Orange (noir, blanc, orange en accent)
+# Les noms historiques (JAUNE…) sont conservés : JAUNE est désormais l'orange de marque.
 # ---------------------------------------------------------------------------
-JAUNE, JAUNE_CLAIR, GRIS, GRIS_FONCE, GRIS_CLAIR = "#F2C811", "#F7E08A", "#A6A6A6", "#5F5F5F", "#E3E3E3"
+ORANGE, NOIR = "#FF7900", "#000000"
+JAUNE, JAUNE_CLAIR, GRIS, GRIS_FONCE, GRIS_CLAIR = ORANGE, "#FFC08A", "#9E9E9E", "#333333", "#E0E0E0"
 PALETTE = [JAUNE, GRIS, GRIS_FONCE, JAUNE_CLAIR, GRIS_CLAIR]
 COULEURS_GENRE = {"F": JAUNE, "M": GRIS, "Non renseigné": GRIS_CLAIR}
-COULEURS_NIVEAU = {"Très élevé": "#B03A2E", "Élevé": JAUNE, "Modéré": JAUNE_CLAIR, "Faible": GRIS_CLAIR}
+COULEURS_NIVEAU = {"Très élevé": "#CD3C14", "Élevé": JAUNE, "Modéré": JAUNE_CLAIR, "Faible": GRIS_CLAIR}
 px.defaults.template = "plotly_white"
 px.defaults.color_discrete_sequence = PALETTE
 
 st.markdown(f"""
 <style>
   .block-container {{padding-top: 3.2rem; padding-bottom: 2rem;}}
-  .titre-page {{font-size: 2rem; font-weight: 600; color: #333; margin: 0;
-               border-bottom: 3px solid {JAUNE}; display: inline-block; padding-bottom: 2px;}}
-  .titre-page span {{color: #B8860B; font-weight: 700; margin-right: .4rem;}}
-  .tuile {{background: #fff; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.18);
-          padding: 10px 14px; height: 100%; min-height: 92px;}}
-  .tuile .valeur {{color: {JAUNE}; font-size: 1.9rem; font-weight: 700; line-height: 1.1;
-                   text-shadow: 0 0 1px #c9a200;}}
-  .tuile .libelle {{color: #555; font-size: .85rem;}}
-  .tuile .delta-pos {{color: #2e8b57; font-size: .8rem; font-weight: 600;}}
-  .tuile .delta-neg {{color: #c0392b; font-size: .8rem; font-weight: 600;}}
-  .tuile .icone {{font-size: 1.5rem; float: right; opacity: .55;}}
-  .bandeau {{background: {JAUNE}; color: #222; font-weight: 700; border-radius: 4px;
-            padding: 8px 4px; text-align: center; font-size: .85rem; word-break: keep-all;}}
-  button[kind="primary"] {{background: {JAUNE} !important; color: #222 !important; border: none !important;
+  .titre-page {{font-size: 2rem; font-weight: 800; color: {NOIR}; margin: 0; letter-spacing: -.02em;
+               display: inline-block; padding-bottom: 2px;}}
+  .titre-page span {{color: {ORANGE}; font-weight: 800; margin-right: .45rem;}}
+  .ico {{font-family: 'Material Symbols Rounded'; font-weight: normal; font-style: normal; line-height: 1;
+        letter-spacing: normal; text-transform: none; white-space: nowrap; direction: ltr;
+        -webkit-font-feature-settings: 'liga'; font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased;}}
+  .tuile {{background: #fff; border: 1px solid #E6E6E6; border-radius: 12px; padding: 14px 16px;
+          height: 100%; min-height: 96px; position: relative;}}
+  .tuile .valeur {{color: {NOIR}; font-size: clamp(1.25rem, 1.7vw, 1.85rem); padding-right: 30px; font-weight: 800; line-height: 1.1; letter-spacing: -.02em;}}
+  .tuile .libelle {{color: #6B6B6B; font-size: .85rem; margin-top: 2px; padding-right: 34px;}}
+  .tuile .delta-pos, .tuile .delta-neg {{display: inline-block; font-size: .75rem; font-weight: 700; border-radius: 999px;
+          padding: 1px 8px; margin-top: 6px;}}
+  .tuile .delta-pos {{color: #1E7B4C; background: #E6F5EC;}}
+  .tuile .delta-neg {{color: #CD3C14; background: #FBEAE5;}}
+  .tuile .icone {{position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 50%;
+          background: #FFF1E5; color: {ORANGE}; display: flex; align-items: center; justify-content: center;
+          font-size: 18px;}}
+  .tuile .icone:empty {{display: none;}}
+  .bandeau {{background: {NOIR}; color: #fff; font-weight: 700; border-radius: 12px;
+            padding: 14px 6px; text-align: center; font-size: .85rem; word-break: keep-all;}}
+  .bandeau .ico {{color: {ORANGE}; font-size: 22px; display: block; margin-bottom: 4px;}}
+  button[kind="primary"] {{background: {ORANGE} !important; color: #000 !important; border: none !important;
                            font-weight: 700 !important;}}
-  .note {{color: #777; font-size: .78rem;}}
-  div[data-testid="stVerticalBlockBorderWrapper"] {{box-shadow: 0 1px 4px rgba(0,0,0,.10);}}
+  button[kind="primary"]:hover {{background: #000 !important; color: #fff !important;}}
+  .note {{color: #8C8C8C; font-size: .78rem;}}
+  div[data-testid="stVerticalBlockBorderWrapper"] {{border-radius: 12px; border-color: #E6E6E6;}}
   .st-key-nav-pages div[data-testid="stPageLink"] a, .st-key-nav-pages button {{justify-content: center;
-      border: 1px solid #ddd; border-radius: 6px; padding: 2px 0 !important; min-height: 2.1rem !important;
+      border: 1px solid #E0E0E0; border-radius: 999px; padding: 2px 0 !important; min-height: 2.1rem !important;
       font-size: 1.05rem !important; background: #fff;}}
-  .population {{color: #555; font-size: .8rem; background: #FAFAF7; border: 1px solid #EEE; border-radius: 6px;
-               padding: 5px 10px; margin: -4px 0 10px 0;}}
-  .population b {{color: #222;}}
-  .avertissement {{background: #FFF8E1; border: 1px solid #F1E3A6; padding: 10px 14px; border-radius: 4px;
+  .st-key-nav-pages div[data-testid="stPageLink"] a:hover, .st-key-nav-pages button:hover {{border-color: {ORANGE};
+      background: #FFF1E5;}}
+  .population {{color: #595959; font-size: .8rem; background: #F7F7F7; border: 1px solid #EEE; border-radius: 999px;
+               padding: 5px 14px; margin: -4px 0 12px 0;}}
+  .population b {{color: #000;}}
+  .avertissement {{background: #FFF4EB; border: 1px solid #FFD9B8; padding: 10px 14px; border-radius: 10px;
                   font-size: .9rem; color: #333;}}
 </style>
 """, unsafe_allow_html=True)
@@ -156,12 +169,25 @@ def fcfa(x):
     return f"{x / 1e3:.0f} k"
 
 
+ICONES = {"👥": "groups", "🚪": "logout", "🧲": "person_add", "👩": "woman", "👨": "man", "👤": "person",
+          "⚥": "wc", "⏳": "hourglass_empty", "💰": "payments", "👩\u200d💼": "badge", "🎂": "cake",
+          "🧑\u200d🤝\u200d🧑": "diversity_3", "📅": "event", "🤒": "sick", "⏱️": "schedule", "📊": "bar_chart",
+          "🏃": "directions_run", "👔": "work", "📉": "trending_down", "📈": "trending_up", "🏢": "domain",
+          "🎯": "target", "📝": "edit_note", "📄": "description", "🗂️": "folder", "🛠️": "build", "🔤": "abc"}
+
+
+def ico(e):
+    """Icône Material (police déjà chargée par Streamlit) à la place d'un emoji."""
+    nom = ICONES.get(e, e)
+    return f"<span class='ico'>{nom}</span>" if nom else ""
+
+
 def tuile(col, libelle, valeur, icone="", delta=None, inverse=False):
     d = ""
     if delta is not None and not pd.isna(delta):
         bon = (delta >= 0) != inverse
         d = f"<div class='{'delta-pos' if bon else 'delta-neg'}'>{'▲' if delta >= 0 else '▼'} {pct(abs(delta))}</div>"
-    col.markdown(f"<div class='tuile'><span class='icone'>{icone}</span><div class='valeur'>{valeur}</div>"
+    col.markdown(f"<div class='tuile'><span class='icone'>{ico(icone)}</span><div class='valeur'>{valeur}</div>"
                  f"<div class='libelle'>{libelle}</div>{d}</div>", unsafe_allow_html=True)
 
 
@@ -170,7 +196,20 @@ def fig_style(fig, hauteur=290, legende=True):
                       showlegend=legende, title_font_size=13, title_x=0.01, title_font_color="#333",
                       separators=", ",                       # virgule décimale, espace pour les milliers
                       legend=dict(orientation="h", y=-0.18, x=0.5, xanchor="center"))
+    fig.update_layout(font=dict(color="#333"), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                      barcornerradius=5, hoverlabel=dict(bgcolor="#000", font_color="#fff", bordercolor="#000"),
+                      title_font=dict(size=14, color="#000"))
+    fig.update_xaxes(gridcolor="#F0F0F0", linecolor="#E0E0E0", zeroline=False)
+    fig.update_yaxes(gridcolor="#F0F0F0", linecolor="#E0E0E0", zeroline=False)
     fig.update_traces(selector=dict(type="bar"), textangle=0, cliponaxis=False)
+    # série unique en orange : barres en gris clair, seule la plus haute reste en orange (l'orange sert d'accent)
+    if len(fig.data) == 1 and fig.data[0].type in ("bar", "funnel") and fig.data[0].marker.color == ORANGE:
+        t = fig.data[0]
+        v = pd.to_numeric(pd.Series(t.x if t.orientation == "h" else t.y), errors="coerce")
+        if len(v) > 1 and v.notna().any():
+            imax = int(v.abs().idxmax())
+            t.marker.color = [ORANGE if i == imax else "#D6D6D6" for i in range(len(v))]
+            t.textfont = dict(color="#333")
     return fig
 
 
@@ -186,17 +225,21 @@ FORMATS_ANNEAU = {
 
 
 def anneau(df, noms, valeurs, titre, couleurs=None, fmt="n"):
-    fig = px.pie(df, names=noms, values=valeurs, hole=0.6, title=titre,
+    fig = px.pie(df, names=noms, values=valeurs, hole=0.74, title=titre,
                  color=noms, color_discrete_map=couleurs or {})
-    fig.update_traces(texttemplate=FORMATS_ANNEAU[fmt], textposition="outside", sort=False)
+    fig.update_traces(texttemplate=FORMATS_ANNEAU[fmt], textposition="outside", sort=False,
+                      marker=dict(line=dict(color="#fff", width=3)), textfont=dict(size=11, color="#595959"))
     fig.update_layout(showlegend=False)
+    if fmt == "n":                                   # total au centre de l'anneau
+        total = (df[valeurs].sum() if isinstance(valeurs, str) else sum(valeurs))
+        fig.add_annotation(text=f"<b>{nb(total)}</b>", showarrow=False, font=dict(size=18, color="#000"))
     return fig
 
 
 def sparkline(serie, hauteur=70):
     serie = serie.fillna(0)
     fig = go.Figure(go.Scatter(x=list(range(len(serie))), y=serie.values, mode="lines",
-                               fill="tozeroy", line=dict(color=JAUNE, width=2), fillcolor="rgba(242,200,17,.35)"))
+                               fill="tozeroy", line=dict(color=JAUNE, width=2.5, shape="spline"), fillcolor="rgba(255,121,0,.12)"))
     fig.update_layout(height=hauteur, margin=dict(l=0, r=0, t=0, b=0), xaxis_visible=False, yaxis_visible=False,
                       showlegend=False, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     fig.update_yaxes(range=[serie.min() * 0.9, serie.max() * 1.05])
@@ -443,7 +486,7 @@ def p_vue_ensemble():
 
     def ligne(theme, icone):
         c = st.columns([1.0, 1.6, 1.6, 2, 1.4])
-        c[0].markdown(f"<div class='bandeau' style='margin-top:30px'>{icone}<br>{theme}</div>", unsafe_allow_html=True)
+        c[0].markdown(f"<div class='bandeau' style='margin-top:30px'>{ico(icone)}{theme}</div>", unsafe_allow_html=True)
         return c
 
     # Collaborateurs
@@ -612,7 +655,7 @@ def p_diversite():
         ga = cur.groupby(["grade", "tranche_age"]).size().reset_index(name="n")
         graphique(st, px.bar(ga, x="grade", y="n", color="tranche_age", title="Grade × tranche d'âge",
                              category_orders={"tranche_age": ORDRE_AGE},
-                             color_discrete_sequence=[GRIS_CLAIR, JAUNE_CLAIR, JAUNE, "#D4AC0D", GRIS, GRIS_FONCE, "#333"])
+                             color_discrete_sequence=[GRIS_CLAIR, JAUNE_CLAIR, JAUNE, "#E05A00", GRIS, GRIS_FONCE, "#333"])
                   .update_layout(xaxis_title=None, yaxis_visible=False), 270)
 
 
@@ -641,10 +684,12 @@ def p_fiche():
         couleur = COULEURS_NIVEAU[p["niveau_risque"]]
         texte = "white" if p["niveau_risque"] == "Très élevé" else "#222"
         st.markdown(
-            f"<div style='background:#FAFAF7;border:1px solid #EEE;border-radius:6px;padding:14px;min-height:430px'>"
+            f"<div style='background:#fff;border:1px solid #E6E6E6;border-radius:12px;padding:14px;min-height:430px'>"
             f"<div style='background:{couleur};color:{texte};text-align:center;font-weight:700;border-radius:4px;"
             f"padding:4px'>Niveau de risque : {p['niveau_risque'].lower()}</div>"
-            f"<div style='font-size:3.2rem;text-align:center;margin:8px 0'>{ {'F': '👩', 'M': '👨'}.get(p['genre'], '👤') }</div>"
+            f"<div style='width:76px;height:76px;border-radius:50%;background:#000;color:{ORANGE};margin:14px auto;display:flex;"
+            f"align-items:center;justify-content:center'><span class='ico' style='font-size:44px'>"
+            f"{ {'F': 'woman', 'M': 'man'}.get(p['genre'], 'person') }</span></div>"
             f"<b>{p['id']}</b><br><span class='note'>Identifiant</span><br><br>"
             f"<b>{p['poste']}</b><br><span class='note'>Poste</span><br><br>"
             f"<b>{p['departement']}</b> · {p['grade']} · {p['contrat']}<br><span class='note'>Département · grade · contrat</span><br><br>"
@@ -752,7 +797,7 @@ def p_tendances():
         ga = cur.groupby(["grade", "tranche_age"]).size().reset_index(name="n")
         graphique(st, px.bar(ga, x="grade", y="n", color="tranche_age", barmode="group",
                              title=f"Grade × tranche d'âge ({per})", category_orders={"tranche_age": ORDRE_AGE},
-                             color_discrete_sequence=[GRIS_CLAIR, JAUNE_CLAIR, JAUNE, "#D4AC0D", GRIS, GRIS_FONCE, "#333"])
+                             color_discrete_sequence=[GRIS_CLAIR, JAUNE_CLAIR, JAUNE, "#E05A00", GRIS, GRIS_FONCE, "#333"])
                   .update_layout(xaxis_title=None, yaxis_visible=False), 280)
     with c3.container(border=True):
         dg = d[(d["jeu"] == "historique") & (d["target"] == 1)].groupby(["periode", "genre"]).size() \
@@ -863,6 +908,7 @@ def p_salaires():
     c1, c2 = st.columns([1.5, 1.4])
     with c1.container(border=True):
         ag = cur[cur["genre"].isin(["F", "M"])].groupby(["tranche_age", "genre"])["salaire_mensuel"].mean().reset_index()
+        ag = ag.sort_values("tranche_age", key=lambda x: x.map({t: i for i, t in enumerate(ORDRE_AGE)}))
         fig = px.line(ag, x="tranche_age", y="salaire_mensuel", color="genre", title="Salaire moyen par âge et par genre",
                       category_orders={"tranche_age": ORDRE_AGE}, color_discrete_map=COULEURS_GENRE, markers=True)
         fig.update_traces(line_width=3)
@@ -988,7 +1034,7 @@ def p_performance():
         vmax = m.iloc[:-1, :-1].values.max() or 1
 
         def teinte(v):
-            return f"background-color: rgba(242,200,17,{0.15 + 0.85 * v / vmax:.2f})"
+            return f"background-color: rgba(255,121,0,{0.08 + 0.6 * v / vmax:.2f})"
         st.dataframe(m.style.map(teinte, subset=(m.index[:-1], m.columns[:-1])), width="stretch", height=230)
     st.markdown("<div class='note'>Niveaux de performance (note sur 5) : Insuffisante ≤ 2,5 · Attendue ≤ 3,5 · "
                 "Bonne ≤ 4,2 · Excellente au-delà.</div>", unsafe_allow_html=True)
