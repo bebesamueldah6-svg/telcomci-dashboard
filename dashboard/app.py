@@ -76,26 +76,16 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# Mise en avant au survol (proposition : ?survol=relief | contour | focus)
+# Mise en avant au survol : l'élément pointé monte légèrement, prend un contour orange et un fond orange pâle
 CARTE = 'div[class*="st-key-carte-"]'
-SURVOL = {
-    "relief": f"""
-  .tuile, {CARTE} {{transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;}}
+st.markdown(f"""<style>
+  .tuile, {CARTE} {{transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;}}
   .tuile:hover, {CARTE}:hover {{transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.09);
-      border-color: {ORANGE} !important;}}""",
-    "contour": f"""
-  .tuile, {CARTE} {{transition: background .18s ease, border-color .18s ease;}}
-  .tuile:hover {{border: 1.5px solid {ORANGE}; background: #FFF8F2;}}
+      border: 1.5px solid {ORANGE} !important;}}
+  .tuile:hover {{background: #FFF8F2;}}
   .tuile:hover .icone {{background: {ORANGE}; color: #000;}}
-  {CARTE}:hover {{border: 1.5px solid {ORANGE} !important; background: #FFFCFA;}}""",
-    "focus": f"""
-  .tuile, {CARTE} {{transition: opacity .2s ease, border-color .2s ease, box-shadow .2s ease;}}
-  .stMain:has(.tuile:hover) .tuile:not(:hover),
-  .stMain:has({CARTE}:hover) {CARTE}:not(:hover) {{opacity: .38;}}
-  .tuile:hover, {CARTE}:hover {{border-color: {ORANGE} !important; box-shadow: 0 8px 22px rgba(255,121,0,.14);}}""",
-}
-st.markdown(f"<style>{SURVOL.get(st.query_params.get('survol', 'relief'), SURVOL['relief'])}</style>",
-            unsafe_allow_html=True)
+  {CARTE}:hover {{background: #FFFCFA;}}
+</style>""", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
