@@ -61,7 +61,8 @@ st.markdown(f"""
                            font-weight: 700 !important;}}
   button[kind="primary"]:hover {{background: #000 !important; color: #fff !important;}}
   .note {{color: #8C8C8C; font-size: .78rem;}}
-  div[data-testid="stVerticalBlockBorderWrapper"] {{border-radius: 12px; border-color: #E6E6E6;}}
+  div[class*="st-key-carte-"] {{border-radius: 12px !important; border-color: #E6E6E6 !important;
+      background: #fff;}}
   .st-key-nav-pages div[data-testid="stPageLink"] a, .st-key-nav-pages button {{justify-content: center;
       border: 1px solid #E0E0E0; border-radius: 999px; padding: 2px 0 !important; min-height: 2.1rem !important;
       font-size: 1.05rem !important; background: #fff;}}
@@ -74,6 +75,27 @@ st.markdown(f"""
                   font-size: .9rem; color: #333;}}
 </style>
 """, unsafe_allow_html=True)
+
+# Mise en avant au survol (proposition : ?survol=relief | contour | focus)
+CARTE = 'div[class*="st-key-carte-"]'
+SURVOL = {
+    "relief": f"""
+  .tuile, {CARTE} {{transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;}}
+  .tuile:hover, {CARTE}:hover {{transform: translateY(-3px); box-shadow: 0 12px 28px rgba(0,0,0,.09);
+      border-color: {ORANGE} !important;}}""",
+    "contour": f"""
+  .tuile, {CARTE} {{transition: background .18s ease, border-color .18s ease;}}
+  .tuile:hover {{border: 1.5px solid {ORANGE}; background: #FFF8F2;}}
+  .tuile:hover .icone {{background: {ORANGE}; color: #000;}}
+  {CARTE}:hover {{border: 1.5px solid {ORANGE} !important; background: #FFFCFA;}}""",
+    "focus": f"""
+  .tuile, {CARTE} {{transition: opacity .2s ease, border-color .2s ease, box-shadow .2s ease;}}
+  .stMain:has(.tuile:hover) .tuile:not(:hover),
+  .stMain:has({CARTE}:hover) {CARTE}:not(:hover) {{opacity: .38;}}
+  .tuile:hover, {CARTE}:hover {{border-color: {ORANGE} !important; box-shadow: 0 8px 22px rgba(255,121,0,.14);}}""",
+}
+st.markdown(f"<style>{SURVOL.get(st.query_params.get('survol', 'relief'), SURVOL['relief'])}</style>",
+            unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +231,15 @@ def fenetre_detail(titre, df):
 
 
 _COMPTEUR_DETAILS = [0]
+
+
+_COMPTEUR_CARTES = [0]
+
+
+def carte(parent):
+    """Bloc encadré (graphique ou tableau) avec une clé stable, pour le style au survol."""
+    _COMPTEUR_CARTES[0] += 1
+    return parent.container(border=True, key=f"carte-{_COMPTEUR_CARTES[0]}")
 
 
 def tuile(col, libelle, valeur, icone="", delta=None, inverse=False, detail=None):
@@ -709,16 +740,16 @@ def p_demographie():
     st.write("")
 
     c1, c2, c3 = st.columns([1, 1.3, 1.5])
-    with c1.container(border=True):
+    with carte(c1):
         graphique(st, anneau(cur["contrat"].value_counts().reset_index(), "contrat", "count", "Par type de contrat",
                              {"CDI": JAUNE, "CDD": GRIS}), 240)
-    with c2.container(border=True):
+    with carte(c2):
         gc = cur.groupby(["grade", "contrat"]).size().reset_index(name="n")
         graphique(st, px.bar(gc, y="grade", x="n", color="contrat", orientation="h", text="n",
                              title="Grade × type de contrat", color_discrete_map={"CDI": JAUNE, "CDD": GRIS},
                              category_orders={"grade": ["G5", "G4", "G3", "G2", "G1"]})
                   .update_layout(xaxis_title=None, yaxis_title=None), 240)
-    with c3.container(border=True):
+    with carte(c3):
         tv = d[d["jeu"] == "historique"].groupby("periode")["target"].mean().reset_index()
         ab = d.groupby("periode")["taux_absenteisme"].mean().reset_index()
         fig = go.Figure()
@@ -730,16 +761,16 @@ def p_demographie():
         graphique(st, fig, 240)
 
     c1, c2, c3 = st.columns([1, 1.3, 1.5])
-    with c1.container(border=True):
+    with carte(c1):
         v = cur["ville_affectation"].value_counts().sort_values().reset_index()
         graphique(st, px.bar(v, y="ville_affectation", x="count", orientation="h", text="count", title="Par ville",
                              color_discrete_sequence=[JAUNE]).update_layout(xaxis_visible=False, yaxis_title=None), 260)
-    with c2.container(border=True):
+    with carte(c2):
         s = cur["tranche_salaire"].value_counts().reindex(ORDRE_SAL).fillna(0).reset_index()
         fig = px.funnel(s, y="tranche_salaire", x="count", title="Tranches de salaire mensuel (FCFA)",
                         color_discrete_sequence=[JAUNE])
         graphique(st, fig.update_layout(yaxis_title=None), 260)
-    with c3.container(border=True):
+    with carte(c3):
         a = cur["tranche_anciennete"].value_counts().reindex(ORDRE_ANC).fillna(0).reset_index()
         graphique(st, px.bar(a, x="tranche_anciennete", y="count", text="count", title="Par ancienneté",
                              color_discrete_sequence=[JAUNE]).update_layout(xaxis_title=None, yaxis_visible=False), 260)
@@ -752,39 +783,39 @@ def p_diversite():
     d, per, _ = en_tete(3, "Analyse de la diversité", cle="div")
     cur = d[d["periode"] == per]
     c1, c2, c3 = st.columns([1, 1.6, 1.2])
-    with c1.container(border=True):
+    with carte(c1):
         nv = cur[cur["arrivee"] == 1].groupby(["generation", "genre"]).size().reset_index(name="n")
         graphique(st, px.bar(nv, x="generation", y="n", color="genre", text="n", title="Arrivées par génération",
                              color_discrete_map=COULEURS_GENRE).update_layout(xaxis_title=None, yaxis_visible=False), 230)
-    with c2.container(border=True):
+    with carte(c2):
         gg = cur.groupby(["grade", "generation"]).size().reset_index(name="n")
         graphique(st, px.bar(gg, x="grade", y="n", color="generation", barmode="group", text="n",
                              title="Grade × génération",
                              color_discrete_map={"Génération Z": GRIS_CLAIR, "Génération Y": JAUNE, "Génération X": GRIS})
                   .update_layout(xaxis_title=None, yaxis_visible=False), 230)
-    with c3.container(border=True):
+    with carte(c3):
         gr = cur.groupby(["grade", "genre"]).size().reset_index(name="n")
         graphique(st, px.bar(gr, x="grade", y="n", color="genre", text="n", title="Grade × genre",
                              color_discrete_map=COULEURS_GENRE).update_layout(xaxis_title=None, yaxis_visible=False), 230)
 
     c1, c2, c3, c4 = st.columns([1, 1.3, 1.2, 1.2])
-    with c1.container(border=True):
+    with carte(c1):
         graphique(st, anneau(cur["niveau_etude"].value_counts().reset_index(), "niveau_etude", "count",
                              "Niveau d'études"), 270)
-    with c2.container(border=True):
+    with carte(c2):
         vg = cur.groupby(["ville_affectation", "genre"]).size().reset_index(name="n")
         vg["part"] = vg["n"] / vg.groupby("ville_affectation")["n"].transform("sum")
         graphique(st, px.bar(vg, y="ville_affectation", x="part", color="genre", orientation="h",
                              text=vg["part"].map(lambda v: pct(v, 0)), title="Diversité de genre par ville",
                              color_discrete_map=COULEURS_GENRE)
                   .update_layout(xaxis_visible=False, yaxis_title=None), 270)
-    with c3.container(border=True):
+    with carte(c3):
         fc = d.groupby("periode").apply(lambda x: (x.loc[x["cadre"] == 1, "genre"] == "F").mean()).reset_index(name="p")
         fig = px.area(fc, x="periode", y="p", title="% de femmes parmi les cadres", markers=True,
                       text=fc["p"].map(pct), color_discrete_sequence=[JAUNE])
         graphique(st, fig.update_traces(textposition="top center").update_layout(
             xaxis_title=None, yaxis_title=None, yaxis_tickformat=".0%"), 270)
-    with c4.container(border=True):
+    with carte(c4):
         ga = cur.groupby(["grade", "tranche_age"]).size().reset_index(name="n")
         graphique(st, px.bar(ga, x="grade", y="n", color="tranche_age", title="Grade × tranche d'âge",
                              category_orders={"tranche_age": ORDRE_AGE},
@@ -901,18 +932,18 @@ def p_tendances():
         t = st.columns(2)
         tuile(t[0], "Effectif", nb(len(cur)), "👥")
         tuile(t[1], f"Départs ({coh})", nb(hc["target"].sum()), "🚪")
-        with st.container(border=True):
+        with carte(st):
             gp = d.groupby(["periode", "genre"]).size().reset_index(name="n")
             graphique(st, px.bar(gp[gp["genre"] != "INCONNU"], x="periode", y="n", color="genre", text="n",
                                  title="Effectif par genre", color_discrete_map=COULEURS_GENRE)
                       .update_layout(xaxis_title=None, yaxis_visible=False), 260)
-    with c2.container(border=True):
+    with carte(c2):
         dp = d[d["jeu"] == "historique"].groupby("periode")["target"].sum().reset_index()
         fig = px.line(dp, x="periode", y="target", markers=True, text="target", title="Départs à 6 mois par cohorte",
                       color_discrete_sequence=[JAUNE])
         graphique(st, fig.update_traces(textposition="top center", line_width=3)
                   .update_layout(xaxis_title=None, yaxis_title=None), 360)
-    with c3.container(border=True):
+    with carte(c3):
         eff = d.groupby("periode").size()
         var = eff.pct_change().dropna()
         fig = go.Figure(go.Waterfall(x=list(var.index), y=list(var.values * 100), measure=["relative"] * len(var),
@@ -922,17 +953,17 @@ def p_tendances():
         graphique(st, fig, 360, False)
 
     c1, c2, c3 = st.columns([1, 1.4, 1.4])
-    with c1.container(border=True):
+    with carte(c1):
         e = d.groupby("periode").size().reset_index(name="n")
         graphique(st, px.bar(e, x="periode", y="n", text="n", title="Effectif par période",
                              color_discrete_sequence=[JAUNE]).update_layout(xaxis_title=None, yaxis_visible=False), 280)
-    with c2.container(border=True):
+    with carte(c2):
         ga = cur.groupby(["grade", "tranche_age"]).size().reset_index(name="n")
         graphique(st, px.bar(ga, x="grade", y="n", color="tranche_age", barmode="group",
                              title=f"Grade × tranche d'âge ({per})", category_orders={"tranche_age": ORDRE_AGE},
                              color_discrete_sequence=[GRIS_CLAIR, JAUNE_CLAIR, JAUNE, "#E05A00", GRIS, GRIS_FONCE, "#333"])
                   .update_layout(xaxis_title=None, yaxis_visible=False), 280)
-    with c3.container(border=True):
+    with carte(c3):
         dg = d[(d["jeu"] == "historique") & (d["target"] == 1)].groupby(["periode", "genre"]).size() \
             .unstack(fill_value=0).reindex(columns=["F", "M"], fill_value=0)
         fig = go.Figure()
@@ -958,26 +989,26 @@ def p_arrivees():
     tuile(c[3], "En CDI", pct((nv["contrat"] == "CDI").mean()), "📝")
     st.write("")
     c1, c2, c3 = st.columns([1, 1.6, 1.4])
-    with c1.container(border=True):
+    with carte(c1):
         graphique(st, anneau(nv["genre"].value_counts().reset_index(), "genre", "count", "Par genre",
                              COULEURS_GENRE), 250)
-    with c2.container(border=True):
+    with carte(c2):
         a = d.groupby("periode")["arrivee"].sum().reset_index()
         fig = px.line(a, x="periode", y="arrivee", markers=True, text="arrivee", title="Tendance des arrivées",
                       color_discrete_sequence=[JAUNE])
         graphique(st, fig.update_traces(textposition="top center", line_width=3)
                   .update_layout(xaxis_title=None, yaxis_title=None), 250)
-    with c3.container(border=True):
+    with carte(c3):
         gg = nv.groupby(["grade", "genre"]).size().reset_index(name="n")
         graphique(st, px.bar(gg, y="grade", x="n", color="genre", orientation="h", text="n", title="Par grade",
                              color_discrete_map=COULEURS_GENRE, category_orders={"grade": ["G5", "G4", "G3", "G2", "G1"]})
                   .update_layout(xaxis_visible=False, yaxis_title=None), 250)
     c1, c2, c3 = st.columns([1, 1.6, 1.4])
-    with c1.container(border=True):
+    with carte(c1):
         a = nv["tranche_age"].value_counts().reindex(ORDRE_AGE).fillna(0).reset_index()
         graphique(st, px.bar(a, x="tranche_age", y="count", text="count", title="Par tranche d'âge",
                              color_discrete_sequence=[JAUNE]).update_layout(xaxis_title=None, yaxis_visible=False), 280)
-    with c2.container(border=True):
+    with carte(c2):
         a = d.groupby("periode")["arrivee"].sum()
         p_ = d[d["jeu"] == "historique"].groupby("periode")["target"].sum()
         av = pd.DataFrame({"Arrivées": a, "Départs à 6 mois": p_}).reset_index()
@@ -987,7 +1018,7 @@ def p_arrivees():
                                  mode="lines+markers", line=dict(color=GRIS, width=3)))
         fig.data[0].name, fig.data[0].showlegend = "Arrivées", True
         graphique(st, fig.update_layout(xaxis_title=None, yaxis_title=None), 280)
-    with c3.container(border=True):
+    with carte(c3):
         t = cur.groupby("departement")["arrivee"].mean().sort_values(ascending=False).head(5).reset_index()
         graphique(st, px.bar(t, x="departement", y="arrivee", text=t["arrivee"].map(pct),
                              title="Top 5 départements : part d'arrivées", color_discrete_sequence=[JAUNE])
@@ -1007,7 +1038,7 @@ def p_salaires():
     tuile(c[3], "Salaire moyen · femmes", fcfa(cur.loc[cur["genre"] == "F", "salaire_mensuel"].mean()), "👩")
     st.write("")
     c1, c2, c3 = st.columns([1.8, 1, 1.3])
-    with c1.container(border=True):
+    with carte(c1):
         dep = cur.groupby("departement")["salaire_mensuel"].agg(["sum", "mean"]).sort_values("sum", ascending=False)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         fig.add_trace(go.Bar(x=dep.index, y=dep["sum"], name="Masse salariale", marker_color=JAUNE,
@@ -1023,12 +1054,12 @@ def p_salaires():
                     f"<div class='valeur'>{nb(top.iloc[0])}</div><div class='libelle'>FCFA par mois</div></div>",
                     unsafe_allow_html=True)
         st.write("")
-        with st.container(border=True):
+        with carte(st):
             v = top.sort_values().reset_index()
             graphique(st, px.bar(v, y="ville_affectation", x="salaire_mensuel", orientation="h",
                                  text=v["salaire_mensuel"].map(fcfa), title="Salaire moyen par ville",
                                  color_discrete_sequence=[JAUNE]).update_layout(xaxis_visible=False, yaxis_title=None), 190)
-    with c3.container(border=True):
+    with carte(c3):
         g = cur.groupby("grade")["salaire_mensuel"].agg(q1=lambda x: x.quantile(.25), med="median",
                                                          q3=lambda x: x.quantile(.75), n="size").reset_index()
         fig = go.Figure(go.Bar(y=g["grade"], x=g["med"], orientation="h", marker_color=JAUNE,
@@ -1039,14 +1070,14 @@ def p_salaires():
         fig.update_layout(title="Salaire médian par grade (trait : 1er–3e quartile)", yaxis_autorange="reversed")
         graphique(st, fig.update_layout(xaxis_title="FCFA", yaxis_title=None), 300, False)
     c1, c2 = st.columns([1.5, 1.4])
-    with c1.container(border=True):
+    with carte(c1):
         ag = cur[cur["genre"].isin(["F", "M"])].groupby(["tranche_age", "genre"])["salaire_mensuel"].mean().reset_index()
         ag = ag.sort_values("tranche_age", key=lambda x: x.map({t: i for i, t in enumerate(ORDRE_AGE)}))
         fig = px.line(ag, x="tranche_age", y="salaire_mensuel", color="genre", title="Salaire moyen par âge et par genre",
                       category_orders={"tranche_age": ORDRE_AGE}, color_discrete_map=COULEURS_GENRE, markers=True)
         fig.update_traces(line_width=3)
         graphique(st, fig.update_layout(xaxis_title=None, yaxis_title="FCFA"), 280)
-    with c2.container(border=True):
+    with carte(c2):
         st.markdown("**Top 10 des postes par salaire moyen**")
         t = cur.groupby("poste")["salaire_mensuel"].agg(moyenne="mean", effectif="size")
         t = t[t["effectif"] >= 5].sort_values("moyenne", ascending=False).head(10).reset_index()
@@ -1067,26 +1098,26 @@ def p_ecart():
     with c1:
         tuile(st, "Écart de salaire moyen H − F (FCFA)", nb(moy.get("M", np.nan) - moy.get("F", np.nan)), "⚥")
         st.write("")
-        with st.container(border=True):
+        with carte(st):
             nmoy = cur.groupby("genre")["salaire_mensuel"].agg(["mean", "size"]).reset_index()
             graphique(st, px.bar(nmoy, x="genre", y="mean", color="genre", color_discrete_map=COULEURS_GENRE,
                                  text=[f"{fcfa(m)}<br>n={n}" for m, n in zip(nmoy["mean"], nmoy["size"])],
                                  title="Salaire moyen par genre (FCFA)")
                       .update_layout(xaxis_title=None, yaxis_visible=False), 230, False)
-    with c2.container(border=True):
+    with carte(c2):
         ag = cur.groupby(["tranche_age", "genre"])["salaire_mensuel"].mean().reset_index()
         fig = px.line(ag, x="tranche_age", y="salaire_mensuel", color="genre", markers=True,
                       title="Par tranche d'âge", category_orders={"tranche_age": ORDRE_AGE},
                       color_discrete_map=COULEURS_GENRE)
         graphique(st, fig.update_layout(xaxis_title=None, yaxis_title="FCFA"), 330)
-    with c3.container(border=True):
+    with carte(c3):
         dg = cur.groupby(["departement", "genre"])["salaire_mensuel"].mean().reset_index()
         graphique(st, px.bar(dg, y="departement", x="salaire_mensuel", color="genre", orientation="h",
                              text=dg["salaire_mensuel"].map(fcfa), title="Par département",
                              color_discrete_map=COULEURS_GENRE)
                   .update_layout(xaxis_visible=False, yaxis_title=None), 330)
     c1, c2, c3 = st.columns([1, 1.4, 2])
-    with c1.container(border=True):
+    with carte(c1):
         gg = cur.groupby(["grade", "genre"])["salaire_mensuel"].mean().unstack()
         gg["Écart F/H"] = gg["F"] / gg["M"] - 1
         st.markdown("**Par grade**")
@@ -1095,12 +1126,12 @@ def p_ecart():
                          "Femmes": st.column_config.NumberColumn(format="%.0f"),
                          "Hommes": st.column_config.NumberColumn(format="%.0f"),
                          "Écart F/H": st.column_config.NumberColumn(format="percent")})
-    with c2.container(border=True):
+    with carte(c2):
         vg = cur.groupby(["ville_affectation", "genre"])["salaire_mensuel"].mean().reset_index()
         graphique(st, px.bar(vg, x="ville_affectation", y="salaire_mensuel", color="genre", barmode="group",
                              title="Par ville", color_discrete_map=COULEURS_GENRE)
                   .update_layout(xaxis_title=None, yaxis_title="FCFA"), 270)
-    with c3.container(border=True):
+    with carte(c3):
         piv = cur.groupby(["departement", "grade", "genre"])["salaire_mensuel"].mean().unstack()
         ecart = (piv["F"] - piv["M"]).reset_index(name="ecart").dropna()
         graphique(st, px.bar(ecart, x="departement", y="ecart", color="grade", barmode="group",
@@ -1132,7 +1163,7 @@ def p_performance():
         tuile(st, "Effectif", nb(len(sel)), "👥")
         st.write("")
         tuile(st, "% de nouveaux arrivants", pct(sel["arrivee"].mean()), "🧲")
-    with c3.container(border=True):
+    with carte(c3):
         gg = sel.groupby(["grade", "genre"]).size().unstack(fill_value=0).reindex(columns=["F", "M"], fill_value=0)
         fig = go.Figure()
         fig.add_trace(go.Bar(y=gg.index, x=-gg["F"], name="Femmes", orientation="h", marker_color=JAUNE,
@@ -1141,14 +1172,14 @@ def p_performance():
                              text=gg["M"], textposition="inside"))
         fig.update_layout(barmode="relative", title="Effectif par grade et par genre", xaxis_visible=False)
         graphique(st, fig, 260)
-    with c4.container(border=True):
+    with carte(c4):
         e = sel.groupby("annee_embauche").size().reset_index(name="n")
         fig = px.line(e, x="annee_embauche", y="n", markers=True, text="n", title="Effectif par année d'embauche",
                       color_discrete_sequence=[JAUNE])
         graphique(st, fig.update_traces(textposition="top center", line_width=3)
                   .update_layout(xaxis_title=None, yaxis_title=None), 260)
     c1, c2 = st.columns([1.2, 1.4])
-    with c1.container(border=True):
+    with carte(c1):
         dg = cur.groupby(["categorie_perf", "genre"]).size().reset_index(name="n")
         dg = dg[dg["categorie_perf"] != "nan"]
         dg["part"] = dg["n"] / dg.groupby("categorie_perf")["n"].transform("sum")
@@ -1156,7 +1187,7 @@ def p_performance():
                              title="Répartition par genre selon la performance", color_discrete_map=COULEURS_GENRE,
                              category_orders={"categorie_perf": ORDRE_PERF})
                   .update_layout(xaxis_title=None, yaxis_visible=False), 300)
-    with c2.container(border=True):
+    with carte(c2):
         axe = st.radio("Distribution", ["par ancienneté", "par âge"], horizontal=True, key="axe_perf",
                        label_visibility="collapsed")
         col, ordre = ("tranche_anciennete", ORDRE_ANC) if axe == "par ancienneté" else ("tranche_age", ORDRE_AGE)
@@ -1187,13 +1218,13 @@ def p_absenteisme():
         tuile(st, "Hommes", pct(cur.loc[cur["genre"] == "M", "taux_absenteisme"].mean(), 2), "👨")
         st.write("")
         tuile(st, "Femmes", pct(cur.loc[cur["genre"] == "F", "taux_absenteisme"].mean(), 2), "👩")
-    with c2.container(border=True):
+    with carte(c2):
         ca = cur.groupby(["tranche_age", "contrat"])["taux_absenteisme"].mean().reset_index()
         graphique(st, px.bar(ca, x="tranche_age", y="taux_absenteisme", color="contrat", barmode="group",
                              text=ca["taux_absenteisme"].map(lambda v: pct(v, 1)), title="Contrat × tranche d'âge",
                              category_orders={"tranche_age": ORDRE_AGE}, color_discrete_map={"CDI": JAUNE, "CDD": GRIS})
                   .update_layout(xaxis_title=None, yaxis_visible=False), 330)
-    with c3.container(border=True):
+    with carte(c3):
         g = cur.groupby("grade")["taux_absenteisme"].mean()
         g.loc["Total"] = cur["taux_absenteisme"].mean()
         g = g.reset_index()
@@ -1204,20 +1235,20 @@ def p_absenteisme():
     with c4:
         with st.container(key="lien-absences"):
             st.page_link(PAGE["absences-departement"], label="ABSENCES PAR DÉPARTEMENT ➜")
-        with st.container(border=True):
+        with carte(st):
             ta = cur.groupby("tranche_anciennete")["taux_absenteisme"].agg(taux="mean", n="size").reindex(ORDRE_ANC).reset_index()
             graphique(st, px.bar(ta, x="tranche_anciennete", y="taux", title="Taux d'absentéisme par ancienneté",
                                  text=[f"{pct(t, 2)}<br>n={int(n)}" if n == n else "" for t, n in zip(ta["taux"], ta["n"])],
                                  color_discrete_sequence=[JAUNE]).update_layout(xaxis_title=None, yaxis_visible=False),
                       270, False)
     c1, c2, c3 = st.columns([0.9, 2.1, 1.6])
-    with c1.container(border=True):
+    with carte(c1):
         st.markdown("**Par site**")
         s = cur.groupby("code_site")["taux_absenteisme"].mean().sort_values(ascending=False)
         for site, v in s.items():
             st.markdown(f"<div class='libelle'>{site}</div><div class='valeur' style='color:{JAUNE};font-size:1.3rem;"
                         f"font-weight:700'>{pct(v, 2)}</div>", unsafe_allow_html=True)
-    with c2.container(border=True):
+    with carte(c2):
         dep = cur.groupby("departement").agg(eff=("id", "size"), taux=("taux_absenteisme", "mean")).sort_values("eff", ascending=False)
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         fig.add_trace(go.Scatter(x=dep.index, y=dep["eff"], name="Effectif", mode="lines+markers+text",
@@ -1227,7 +1258,7 @@ def p_absenteisme():
         fig.update_yaxes(tickformat=".1%", secondary_y=True)
         fig.update_layout(title="Effectif et taux d'absentéisme par département")
         graphique(st, fig, 300)
-    with c3.container(border=True):
+    with carte(c3):
         t = cur.groupby(["departement", "genre"])["taux_absenteisme"].mean().unstack() \
             .reindex(columns=["F", "M"]) * 100
         t.insert(0, "Total", cur.groupby("departement")["taux_absenteisme"].mean() * 100)
@@ -1254,7 +1285,7 @@ def p_absences_dep():
         tuile(c[2], "Événements d'absence moyens", nb(cur["nb_abs_6m"].mean(), 2), "🏃")
         st.write("")
         c1, c2, c3 = st.columns([1.2, 1, 1.6])
-        with c1.container(border=True):
+        with carte(c1):
             ta = cur.groupby("tranche_anciennete")[["jours_abs_6m", "abs_non_just_6m"]].mean().reindex(ORDRE_ANC).reset_index()
             ta = ta.rename(columns={"jours_abs_6m": "Toutes absences", "abs_non_just_6m": "Non justifiées"})
             graphique(st, px.bar(ta.melt("tranche_anciennete", var_name="type", value_name="jours"),
@@ -1262,10 +1293,10 @@ def p_absences_dep():
                                  title="Jours moyens par ancienneté",
                                  color_discrete_map={"Toutes absences": JAUNE, "Non justifiées": GRIS})
                       .update_layout(xaxis_title=None, yaxis_title=None), 270)
-        with c2.container(border=True):
+        with carte(c2):
             g = cur.groupby("grade")["jours_abs_6m"].sum().reset_index()
             graphique(st, anneau(g, "grade", "jours_abs_6m", "Jours d'absence par grade"), 270)
-        with c3.container(border=True):
+        with carte(c3):
             p = cur.groupby("poste").agg(total=("jours_abs_6m", "sum"), moyen=("jours_abs_6m", "mean")) \
                 .sort_values("total", ascending=False).head(10)
             fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -1275,7 +1306,7 @@ def p_absences_dep():
                                      line=dict(color=GRIS_FONCE)), secondary_y=True)
             fig.update_layout(title="Absences par poste")
             graphique(st, fig, 270)
-        with st.container(border=True):
+        with carte(st):
             st.markdown("**Collaborateurs les plus absents** (identifiants anonymisés)")
             if not auth.peut_voir_nominatif():
                 st.info("Liste individuelle réservée au profil DRH. Le profil Direction générale consulte les "
@@ -1308,28 +1339,28 @@ def p_profil_departs():
         t["texte"] = [f"{int(b)} sur {int(n)}<br>{pct(x)}" for b, n, x in zip(t["departs"], t["n"], t["taux"])]
         return t
 
-    with c1.container(border=True):
+    with carte(c1):
         a = taux_par("tranche_anciennete", ORDRE_ANC)
         graphique(st, px.bar(a, x="tranche_anciennete", y="taux", text="texte",
                              title="Taux de départ par ancienneté (départs / effectif)",
                              color_discrete_sequence=[JAUNE]).update_layout(xaxis_title=None, yaxis_visible=False), 250)
-    with c2.container(border=True):
+    with carte(c2):
         cg = partis.groupby(["contrat", "genre"]).size().reset_index(name="n")
         graphique(st, px.bar(cg, x="contrat", y="n", color="genre", text="n", title="Par contrat",
                              color_discrete_map=COULEURS_GENRE).update_layout(xaxis_title=None, yaxis_visible=False), 250)
-    with c3.container(border=True):
+    with carte(c3):
         g = taux_par("grade", ["G1", "G2", "G3", "G4", "G5"])
         graphique(st, px.bar(g, x="grade", y="taux", text="texte", title="Taux de départ par grade",
                              color_discrete_sequence=[JAUNE]).update_layout(xaxis_title=None, yaxis_visible=False), 250)
     c1, c2, c3 = st.columns([1.3, 1, 1.3])
-    with c1.container(border=True):
+    with carte(c1):
         v = partis.groupby(["ville_affectation", "genre"]).size().reset_index(name="n")
         graphique(st, px.bar(v, x="ville_affectation", y="n", color="genre", text="n", title="Par ville et par genre",
                              color_discrete_map=COULEURS_GENRE).update_layout(xaxis_title=None, yaxis_visible=False), 280)
-    with c2.container(border=True):
+    with carte(c2):
         graphique(st, anneau(partis["genre"].value_counts().reset_index(), "genre", "count", "Par genre",
                              COULEURS_GENRE).update_traces(hole=0), 280)
-    with c3.container(border=True):
+    with carte(c3):
         dc = partis.groupby(["departement", "categorie_perf"]).size().reset_index(name="n")
         dc = dc[dc["categorie_perf"] != "nan"]
         graphique(st, px.bar(dc, x="departement", y="n", color="categorie_perf", text="n",
@@ -1371,12 +1402,12 @@ def p_analyse_departs():
                              f"<div class='libelle'>{l}</div></div>", unsafe_allow_html=True)
     st.write("")
     c1, c2 = st.columns([1.7, 1.3])
-    with c1.container(border=True):
+    with carte(c1):
         gp = h[h["genre"].isin(["F", "M"])].groupby(["periode", "genre"])["target"].mean().reset_index()
         fig = px.line(gp, x="periode", y="target", color="genre", markers=True, title="Taux de départ par genre",
                       color_discrete_map=COULEURS_GENRE, line_dash="genre", line_dash_map={"F": "dot", "M": "solid"})
         graphique(st, fig.update_layout(xaxis_title=None, yaxis_title=None, yaxis_tickformat=".0%"), 280)
-    with c2.container(border=True):
+    with carte(c2):
         dd = hc.groupby("departement")["target"].agg(taux="mean", departs="sum", n="size")
         dd = dd[dd["n"] >= 50].sort_values("taux", ascending=False).head(6).sort_values("taux").reset_index()
         graphique(st, px.bar(dd, y="departement", x="taux", orientation="h",
@@ -1384,7 +1415,7 @@ def p_analyse_departs():
                              title="Taux de départ les plus élevés (départements ≥ 50 personnes)",
                              color_discrete_sequence=[JAUNE])
                   .update_layout(xaxis_visible=False, yaxis_title=None), 280)
-    with st.container(border=True):
+    with carte(st):
         tc = h.groupby(["periode", "contrat"])["target"].sum().reset_index()
         tc["taux"] = tc["target"] / h.groupby("periode").size().reindex(tc["periode"]).values
         graphique(st, px.bar(tc, x="periode", y="taux", color="contrat", text=tc["taux"].map(pct),
@@ -1412,7 +1443,7 @@ def p_anticipation():
     st.caption("Taux de départ réellement observés quand le modèle, entraîné sur le passé, a été appliqué aux 3 dernières "
                "cohortes connues (validation temporelle).")
     c1, c2 = st.columns([1.3, 1])
-    with c1.container(border=True):
+    with carte(c1):
         t = taux.reset_index()
         actuel = act["niveau_risque"].value_counts().reindex(ORDRE_NIVEAUX).fillna(0).astype(int)
         fig = go.Figure(go.Bar(x=t["niveau"], y=t["taux"], marker_color=[COULEURS_NIVEAU[n] for n in t["niveau"]],
@@ -1427,7 +1458,7 @@ def p_anticipation():
         fig.update_layout(title="Taux de départ observé par niveau (trait : écart entre cohortes)",
                           yaxis=dict(tickformat=".0%", range=[0, t["taux_max"].max() * 1.35]))
         graphique(st, fig.update_layout(xaxis_title=None, yaxis_title=None), 320, False)
-    with c2.container(border=True):
+    with carte(c2):
         lect = pd.DataFrame({
             "Niveau": ORDRE_NIVEAUX,
             "Règle": ["5 % des scores les plus hauts", "5 à 16 %", "16 à 50 %", "Moitié basse"],
@@ -1443,7 +1474,7 @@ def p_anticipation():
     # 2. Capacité d'accompagnement
     st.markdown("#### 2 · Combien de collaborateurs la DRH peut-elle accompagner ?")
     c1, c2 = st.columns([1, 2])
-    with c1.container(border=True):
+    with carte(c1):
         n = st.slider("Nombre de collaborateurs accompagnés sur le semestre", 10, 600, 150, 10, key="capacite")
         part = round(n / len(act), 2)
         cap = capacite.loc[max(0.01, min(part, 1.0))]
@@ -1460,7 +1491,7 @@ def p_anticipation():
             f"- Personnes accompagnées qui ne seraient probablement pas parties : **≈ {nb(n - attendus)}**")
         st.caption("Ces chiffres décrivent le ciblage, pas l'effet de l'accompagnement : sans dispositif d'évaluation, "
                    "on ne peut pas estimer les départs évités.")
-    with c2.container(border=True):
+    with carte(c2):
         courbe = capacite[("couverture", "mean")].reset_index()
         courbe.columns = ["part", "couverture"]
         courbe["personnes"] = (courbe["part"] * len(act)).round()
@@ -1474,14 +1505,14 @@ def p_anticipation():
                           yaxis=dict(tickformat=".0%"), xaxis_title="collaborateurs accompagnés")
         graphique(st, fig, 300)
     rep1, rep2 = st.columns(2)
-    with rep1.container(border=True):
+    with carte(rep1):
         r = groupe["departement"].value_counts().reset_index()
         r["part"] = r["count"] / r["departement"].map(act["departement"].value_counts())
         graphique(st, px.bar(r.sort_values("count"), y="departement", x="count", orientation="h",
                              text=[f"{c} ({pct(p_, 0)} du département)" for c, p_ in zip(r.sort_values('count')['count'], r.sort_values('count')['part'])],
                              title="Groupe accompagné par département", color_discrete_sequence=[JAUNE])
                   .update_layout(xaxis_visible=False, yaxis_title=None), 320, False)
-    with rep2.container(border=True):
+    with carte(rep2):
         r = groupe["poste"].value_counts().head(10).reset_index().sort_values("count")
         graphique(st, px.bar(r, y="poste", x="count", orientation="h", text="count",
                              title="Groupe accompagné : 10 postes les plus représentés", color_discrete_sequence=[GRIS])
@@ -1561,7 +1592,7 @@ def p_profil_departement():
                 tuile(k[0], "Effectif", nb(len(cur)), "👥", detail=cur)
                 tuile(k[1], "Arrivées", nb(cur["arrivee"].sum()), "🧲", detail=cur[cur["arrivee"] == 1])
                 tuile(k[2], "Taux d'absentéisme", pct(cur["taux_absenteisme"].mean(), 2), "🤒")
-                with st.container(border=True):
+                with carte(st):
                     ab = d.groupby("periode")["taux_absenteisme"].mean()
                     fig = make_subplots(specs=[[{"secondary_y": True}]])
                     fig.add_trace(go.Bar(x=ab.index, y=ab.pct_change(), name="Variation", marker_color=GRIS_CLAIR),
@@ -1577,7 +1608,7 @@ def p_profil_departement():
                 tuile(k[0], f"Départs ({coh})", nb(hc["target"].sum()), "🚪", detail=hc[hc["target"] == 1])
                 tuile(k[1], "Taux de départ", pct(hc["target"].mean()), "📉")
                 tuile(k[2], "Taux entreprise", pct(he["target"].mean()), "🏢")
-                with st.container(border=True):
+                with carte(st):
                     gg = d[(d["jeu"] == "historique") & (d["target"] == 1)].groupby(["periode", "generation"]).size().reset_index(name="n")
                     graphique(st, px.bar(gg, x="periode", y="n", color="generation", text="n",
                                          title="Départs par génération",
@@ -1591,14 +1622,14 @@ def p_profil_departement():
                 tuile(k[0], "Niveau très élevé ou élevé", nb(s["signale"].sum()), "🎯")
                 tuile(k[1], "Part de l'effectif", pct(s["signale"].mean()), "📊")
                 tuile(k[2], "Probabilité moyenne", pct(s["probabilite"].mean()), "📈")
-                with st.container(border=True):
+                with carte(st):
                     r = s.groupby(["poste", "niveau_risque"]).size().reset_index(name="n")
                     graphique(st, px.bar(r, y="poste", x="n", color="niveau_risque", orientation="h",
                                          title="Niveau de risque par poste",
                                          color_discrete_map=COULEURS_NIVEAU,
                                          category_orders={"niveau_risque": ORDRE_NIVEAUX})
                               .update_layout(xaxis_title=None, yaxis_title=None), 300)
-        with dr.container(border=True):
+        with carte(dr):
             st.markdown("#### 📄 Synthèse")
             effs = entreprise.groupby("departement").size().sort_values(ascending=False)
             rang = list(effs.index).index(dep) + 1 if dep in effs.index else None
@@ -1675,7 +1706,7 @@ def p_exports():
                 + ("les exports incluent la liste nominative des scores." if nominatif else
                    "les exports ne contiennent que des données agrégées."))
     c1, c2 = st.columns(2)
-    with c1.container(border=True):
+    with carte(c1):
         st.markdown("##### 📊 Classeur Excel")
         st.caption("Lisez-moi et définitions · synthèse par période · départements · rémunération par grade · "
                    "turnover par cohorte · fiabilité des niveaux · anticipation" + (" (agrégée et nominative)" if nominatif
@@ -1687,7 +1718,7 @@ def p_exports():
             st.download_button("⬇️ Télécharger le classeur (.xlsx)", st.session_state["xlsx"],
                                f"TelcomCI_RH_{per.replace(' ', '_')}.xlsx", width="stretch", type="primary",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    with c2.container(border=True):
+    with carte(c2):
         st.markdown("##### 📄 Synthèse PDF")
         st.caption("Deux pages pour un comité : à retenir, indicateurs clés, points d'attention, fiabilité des niveaux "
                    "de risque, tableau des départements, méthode et limites. Aucune donnée individuelle.")
