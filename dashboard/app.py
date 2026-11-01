@@ -311,15 +311,13 @@ def p_accueil():
     pages = ORDRE[1:]
     infos = REGISTRE_VISIBLE
     replies = st.session_state.setdefault("domaines_replies", set())
-    # proposition : ?repli=fixe (les pastilles gardent leur place) ou ?repli=repartir (elles se répartissent)
-    repartir = st.query_params.get("repli", "fixe") == "repartir"
     sections = []
     for r in infos:
         if not sections or sections[-1][0] != r["section"]:
             sections.append([r["section"], 0])
         sections[-1][1] += 1
     replie = [nom in replies for nom, _ in sections]
-    poids = [(1.3 if (rep and repartir) else max(n, 2)) for (_, n), rep in zip(sections, replie)]
+    poids = [max(n, 2) for _, n in sections]      # positions fixes, que le domaine soit replié ou non
     pas = (360 - ECART * len(sections)) / sum(poids)
 
     def pt(r, a):
