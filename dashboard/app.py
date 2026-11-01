@@ -972,15 +972,23 @@ def p_diversite():
 DOSSIER_AVATARS = Path(__file__).with_name("avatars")
 
 
+def tranche_avatar(age):
+    if pd.isna(age):
+        return "30_39"
+    return "moins30" if age < 30 else "30_39" if age < 40 else "40_49" if age < 50 else "50plus"
+
+
 @st.cache_data
 def _avatars_disponibles():
-    return {g: sorted(DOSSIER_AVATARS.glob(f"{g}*.svg")) for g in ("F", "M")}
+    return {(g, t): sorted(DOSSIER_AVATARS.glob(f"{g}_{t}_*.svg"))
+            for g in ("F", "M") for t in ("moins30", "30_39", "40_49", "50plus")}
 
 
-def avatar(genre, identifiant="", taille=132):
-    """Avatar illustré (DiceBear, style Avataaars) : attribué de façon stable selon l'identifiant et le genre.
+def avatar(genre, identifiant="", age=None, taille=132):
+    """Avatar illustré (DiceBear, style Avataaars) choisi selon le genre et la tranche d'âge
+    (moins de 30 ans, 30-39, 40-49, 50 et plus) ; dans une tranche, la variante dépend de l'identifiant.
     Genre non renseigné : silhouette neutre."""
-    fichiers = _avatars_disponibles().get(genre) or []
+    fichiers = _avatars_disponibles().get((genre, tranche_avatar(age))) or []
     if fichiers:
         f = fichiers[sum(map(ord, str(identifiant))) % len(fichiers)]
         donnees_svg = base64.b64encode(f.read_bytes()).decode()      # en image : Streamlit filtre les masques SVG
@@ -1038,7 +1046,7 @@ def p_fiche():
             f"<div style='background:#fff;border:1px solid #E6E6E6;border-radius:12px;padding:14px;min-height:430px'>"
             f"<div style='background:{couleur};color:{texte};text-align:center;font-weight:700;border-radius:4px;"
             f"padding:4px'>Niveau de risque : {p['niveau_risque'].lower()}</div>"
-            f"<div style='display:flex;justify-content:center;margin:16px auto 12px auto'>{avatar(p['genre'], p['id'])}</div>"
+            f"<div style='display:flex;justify-content:center;margin:16px auto 12px auto'>{avatar(p['genre'], p['id'], p['age'])}</div>"
             f"<b>{p['id']}</b><br><span class='note'>Identifiant</span><br><br>"
             f"<b>{p['poste']}</b><br><span class='note'>Poste</span><br><br>"
             f"<b>{p['departement']}</b> · {p['grade']} · {p['contrat']}<br><span class='note'>Département · grade · contrat</span><br><br>"
