@@ -288,58 +288,108 @@ def cohorte(periode):
 # 0. Accueil
 # ---------------------------------------------------------------------------
 def p_accueil():
-    """Accueil : les pages disposées autour du cercle, chacune cliquable (liens de navigation natifs)."""
+    """Accueil : les pages disposées autour de l'anneau « cycle de vie », regroupées par domaine (liens natifs)."""
     u = auth.utilisateur()
     # sur la page anneau, on navigue uniquement par les titres autour du cercle : la barre du haut est masquée
     st.markdown("<style>[data-testid='stTopNavigation'], header nav, header [data-testid='stNavSection'] "
                 "{display:none !important;}</style>", unsafe_allow_html=True)
-    h1, h2 = st.columns([4, 1.2], vertical_alignment="center")
-    h1.markdown("<div class='titre-page'><span>TelcomCI</span>HR Analytics</div>", unsafe_allow_html=True)
+    h1, h2 = st.columns([3, 1.6], vertical_alignment="center")
+    h1.markdown("<div class='acc-marque'><b>TelcomCI</b> HR Analytics</div>"
+                "<div class='acc-sous'>Pilotage RH · choisissez un thème autour de l'anneau</div>", unsafe_allow_html=True)
     with h2:
-        st.markdown(f"<div class='note' style='text-align:right'>Connecté : <b>{u['nom']}</b><br>"
-                    f"profil {auth.ROLES[u['role']]['libelle']}</div>", unsafe_allow_html=True)
-        st.button("Se déconnecter", key="deco_accueil", on_click=auth.deconnecter, width="stretch")
+        a, b = st.columns([2.2, 1], vertical_alignment="center")
+        a.markdown(f"<div class='acc-user'><b>{u['nom']}</b><br>profil {auth.ROLES[u['role']]['libelle']}</div>",
+                   unsafe_allow_html=True)
+        b.button("Quitter", key="deco_accueil", icon=":material/logout:", on_click=auth.deconnecter, width="stretch")
 
-    L, H, cx, cy = 1040, 700, 520, 345
-
-    def arc(r, a0, a1, couleur, epaisseur):
-        x0, y0 = cx + r * np.cos(np.radians(a0)), cy + r * np.sin(np.radians(a0))
-        x1, y1 = cx + r * np.cos(np.radians(a1)), cy + r * np.sin(np.radians(a1))
-        grand = 1 if (a1 - a0) % 360 > 180 else 0
-        return (f"<path d='M {x0:.1f} {y0:.1f} A {r} {r} 0 {grand} 1 {x1:.1f} {y1:.1f}' fill='none' "
-                f"stroke='{couleur}' stroke-width='{epaisseur}'/>")
-
-    svg = (f"<svg width='{L}' height='{H}'>"
-           + arc(172, 150, 70, GRIS_FONCE, 40) + arc(141, 230, 140, GRIS, 34) + arc(113, 320, 230, JAUNE, 30)
-           + f"<text x='{cx}' y='{cy - 6}' text-anchor='middle' font-size='22' font-weight='700' fill='{GRIS_FONCE}'"
-             " font-family='sans-serif'>Cycle de vie</text>"
-           + f"<text x='{cx}' y='{cy + 22}' text-anchor='middle' font-size='22' font-weight='700' fill='{GRIS_FONCE}'"
-             " font-family='sans-serif'>du collaborateur</text></svg>")
+    ORANGE, NOIR = "#FF7900", "#000"
+    COUL_SECTION = {"Pilotage": "#000", "Effectifs": "#333", "Rémunération": "#595959", "Absentéisme": "#8C8C8C",
+                    "Performance": "#B3B3B3", "Turnover": ORANGE, "Données": "#D9D9D9"}
+    L, H, cx, cy = 1180, 720, 590, 360
+    R, EP, ECART = 150, 30, 7                    # rayon et épaisseur de l'anneau, écart entre domaines (degrés)
 
     pages = ORDRE[1:]
-    m = len(pages) - 1
-    n_droite = (m + 1) // 2
-    angles = [-90] + list(np.linspace(-64, 78, n_droite)) + list(np.linspace(102, 244, m - n_droite))
+    infos = REGISTRE_VISIBLE
+    sections = []
+    for r in infos:
+        if not sections or sections[-1][0] != r["section"]:
+            sections.append([r["section"], 0])
+        sections[-1][1] += 1
+    poids = [max(n, 2) for _, n in sections]
+    pas = (360 - ECART * len(sections)) / sum(poids)
+
+    def pt(r, a):
+        return cx + r * np.cos(np.radians(a)), cy + r * np.sin(np.radians(a))
+
+    def arc(r, a0, a1):
+        (x0, y0), (x1, y1) = pt(r, a0), pt(r, a1)
+        return f"M {x0:.1f} {y0:.1f} A {r} {r} 0 {1 if a1 - a0 > 180 else 0} 1 {x1:.1f} {y1:.1f}"
+
+    svg, angles, sect_de = [], [], []
+    a = -90 - (poids[0] * pas) / 2               # le premier domaine (Pilotage) centré en haut
+    for k, ((nom, n), w) in enumerate(zip(sections, poids)):
+        a0, a1 = a, a + w * pas
+        coul = COUL_SECTION.get(nom, "#999")
+        svg.append(f"<path d='{arc(R, a0, a1)}' fill='none' stroke='{coul}' stroke-width='{EP}' stroke-linecap='round'/>")
+        # nom du domaine écrit le long de l'anneau, à l'extérieur
+        bas = 0 < ((a0 + a1) / 2) % 360 < 180
+        chemin = arc(R + 30, a1, a0).replace(" 0 1 ", " 0 0 ") if bas else arc(R + 30, a0, a1)
+        svg.append(f"<path id='dom{k}' d='{chemin}' fill='none'/>"
+                   f"<text font-size='10.5' font-weight='700' letter-spacing='1.2' fill='{ORANGE if nom == 'Turnover' else '#8C8C8C'}'"
+                   f" font-family='Inter, sans-serif' dy='{8 if bas else 0}'><textPath href='#dom{k}' startOffset='50%' text-anchor='middle'>"
+                   f"{nom.upper()}</textPath></text>")
+        for j in range(n):
+            angles.append(a0 + (j + .5) * (w * pas) / n)
+            sect_de.append(nom)
+        a = a1 + ECART
+    # repères : point sur l'anneau + trait vers l'étiquette
+    RX, RY = 345, 300
+    for ang, nom in zip(angles, sect_de):
+        (x0, y0), (x1, y1) = pt(R + EP / 2 + 40, ang), (cx + (RX - 8) * np.cos(np.radians(ang)),
+                                                       cy + (RY - 8) * np.sin(np.radians(ang)))
+        coul = ORANGE if nom == "Turnover" else "#C8C8C8"
+        svg.append(f"<line x1='{x0:.1f}' y1='{y0:.1f}' x2='{x1:.1f}' y2='{y1:.1f}' stroke='{coul}' stroke-width='1'/>"
+                   f"<circle cx='{x1:.1f}' cy='{y1:.1f}' r='3' fill='{coul}'/>")
+    svg.append(f"<circle cx='{cx}' cy='{cy}' r='{R - EP / 2 - 14}' fill='none' stroke='#EEE' stroke-width='1'/>"
+               f"<text x='{cx}' y='{cy - 14}' text-anchor='middle' font-size='26' font-weight='800' fill='{NOIR}'"
+               " font-family='Inter, sans-serif' letter-spacing='-0.5'>Cycle de vie</text>"
+               f"<text x='{cx}' y='{cy + 16}' text-anchor='middle' font-size='26' font-weight='800' fill='{ORANGE}'"
+               " font-family='Inter, sans-serif' letter-spacing='-0.5'>du collaborateur</text>"
+               f"<text x='{cx}' y='{cy + 44}' text-anchor='middle' font-size='12' fill='#8C8C8C'"
+               f" font-family='Inter, sans-serif'>{len(pages)} analyses · {len(sections)} domaines</text>")
+    svg = f"<svg width='{L}' height='{H}'>{''.join(svg)}</svg>"
+
     regles = []
-    for i, angle in enumerate(angles):
-        x = cx + 258 * np.cos(np.radians(angle))
-        y = cy + (-312 if i == 0 else 290 * np.sin(np.radians(angle)))
-        t = ("translate(-50%,-50%)" if i == 0 else "translate(0,-50%)" if np.cos(np.radians(angle)) > 0
-             else "translate(-100%,-50%)")
+    for i, (ang, nom) in enumerate(zip(angles, sect_de)):
+        x, y = cx + RX * np.cos(np.radians(ang)), cy + RY * np.sin(np.radians(ang))
+        c = np.cos(np.radians(ang))
+        t = "translate(-50%,-50%)" if abs(c) < .12 else "translate(0,-50%)" if c > 0 else "translate(-100%,-50%)"
         regles.append(f".st-key-cercle-{i} {{left:{x:.0f}px; top:{y:.0f}px; transform:{t};}}")
+        if nom == "Turnover":
+            regles.append(f".st-key-cercle-{i} div[data-testid='stPageLink'] a::before {{background:{ORANGE} !important;"
+                          f" color:#000 !important;}}")
     st.markdown(f"""<style>
+  .acc-marque {{font-size: 1.9rem; font-weight: 800; letter-spacing: -.02em; color: #000;}}
+  .acc-marque b {{color: {ORANGE};}}
+  .acc-sous {{color: #8C8C8C; font-size: .9rem; margin-top: 2px;}}
+  .acc-user {{text-align: right; color: #595959; font-size: .8rem; line-height: 1.35;}}
+  .acc-user b {{color: #000;}}
+  .st-key-deco_accueil button {{border-radius: 999px; border-color: #DDD;}}
+  .st-key-deco_accueil button:hover {{border-color: #000; color: #000;}}
   .st-key-cercle-zone {{position:relative; width:{L}px; height:{H}px !important; min-height:{H}px !important;
                        margin:0 auto; display:block !important; counter-reset: numero;}}
   .st-key-cercle-svg {{position:absolute; left:0; top:0;}}
   div[class*="st-key-cercle-"]:not(.st-key-cercle-zone):not(.st-key-cercle-svg) {{position:absolute;
        width:max-content !important; z-index:2;}}
-  .st-key-cercle-zone div[data-testid="stPageLink"] a {{background:#fff; box-shadow:2px 3px 6px rgba(0,0,0,.18);
-       border-radius:3px; padding:4px 11px 4px 4px; gap:8px; font-weight:600;}}
+  .st-key-cercle-zone div[data-testid="stPageLink"] a {{background:#fff; border:1px solid #E6E6E6; border-radius:999px;
+       padding:4px 14px 4px 4px; gap:9px; font-weight:600; transition: border-color .15s, box-shadow .15s;}}
+  .st-key-cercle-zone div[data-testid="stPageLink"] a span[data-testid="stIconMaterial"] {{color:#8C8C8C;}}
   .st-key-cercle-zone div[data-testid="stPageLink"] a::before {{counter-increment: numero; content: counter(numero);
-       background:radial-gradient(circle at 35% 30%, #FFF6C2, {JAUNE} 60%); color:#333; font-weight:700;
-       border-radius:50%; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center;
-       box-shadow:0 1px 3px rgba(0,0,0,.35); font-size:.85rem; flex-shrink:0;}}
-  .st-key-cercle-zone div[data-testid="stPageLink"] a:hover {{background:{JAUNE};}}
+       background:#000; color:#fff; font-weight:700; border-radius:50%; width:26px; height:26px; display:inline-flex;
+       align-items:center; justify-content:center; font-size:.78rem; flex-shrink:0;}}
+  .st-key-cercle-zone div[data-testid="stPageLink"] a:hover {{border-color:{ORANGE}; box-shadow:0 4px 14px rgba(255,121,0,.18);
+       background:#fff;}}
+  .st-key-cercle-zone div[data-testid="stPageLink"] a:hover::before {{background:{ORANGE}; color:#000;}}
   {''.join(regles)}
 </style>""", unsafe_allow_html=True)
     with st.container(key="cercle-zone"):
