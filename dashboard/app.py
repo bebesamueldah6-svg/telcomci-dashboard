@@ -3,6 +3,8 @@
 Une page d'accueil et quinze pages thématiques, appliquées aux données TelcomCI.
 Lancement local :  streamlit run dashboard/app.py
 """
+from urllib.parse import urlencode
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -215,7 +217,7 @@ def fenetre_detail(titre, df):
         st.dataframe(liste, hide_index=True, width="stretch", height=300,
                      column_config={"Ancienneté (ans)": st.column_config.NumberColumn(format="%.1f")})
         st.download_button("Télécharger la liste (CSV)", liste.to_csv(index=False).encode("utf-8"),
-                           f"{titre.lower().replace(' ', '_')}.csv", "text/csv", icon=":material/download:")
+                           f"{titre.lower().replace(' ', '_')}.csv", "text/csv", icon=":material/download:", on_click="ignore")
     else:
         st.info("La liste nominative est réservée au profil DRH.")
 
@@ -224,6 +226,22 @@ _COMPTEUR_DETAILS = [0]
 
 
 _COMPTEUR_CARTES = [0]
+_DANS_FRAGMENT = [False]
+
+
+def bloc_local(fn):
+    """Fragment : seul ce bloc se recalcule quand on y change un réglage (curseur, choix du département…).
+    Les compteurs de clés sont fixés pour rester stables d'une exécution du bloc à l'autre."""
+    @st.fragment
+    def enveloppe(*args, **kwargs):
+        _DANS_FRAGMENT[0] = True
+        _COMPTEUR_CARTES[0] = _COMPTEUR_DETAILS[0] = _COMPTEUR_GRAPHIQUES[0] = 10_000
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            _DANS_FRAGMENT[0] = False
+    enveloppe.__name__ = fn.__name__
+    return enveloppe
 
 
 def carte(parent):
@@ -315,11 +333,11 @@ def clic_graphique(cle_graph):
 
 def graphique(conteneur, fig, hauteur=290, legende=True, cliquable=True):
     fig = fig_style(fig, hauteur, legende)
-    if not cliquable:
-        conteneur.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-        return
     _COMPTEUR_GRAPHIQUES[0] += 1
     cle = f"g{st.session_state.get('_gen_graph', 0)}-{st.session_state.get('_cle_page', '')}-{_COMPTEUR_GRAPHIQUES[0]}"
+    if not cliquable or _DANS_FRAGMENT[0]:      # dans un bloc local, le clic ne peut pas filtrer toute la page
+        conteneur.plotly_chart(fig, width="stretch", config={"displayModeBar": False}, key=cle)
+        return
     conteneur.plotly_chart(fig, width="stretch", config={"displayModeBar": False}, key=cle,
                            on_select=lambda: clic_graphique(cle), selection_mode="points")
 
@@ -407,6 +425,7 @@ def en_tete(numero, titre, periodes=PERIODES, cle="", avec_departement=True, def
     st.session_state["_cle_page"] = cle
     st.session_state["_periodes_page"] = list(periodes or [])
     st.session_state["_dep_page"] = avec_departement
+    lire_adresse(cle, periodes, avec_departement)
     gauche, milieu, droite, nav = st.columns([3, 3, 1.3, 1.2])
     navigation(nav)
     gauche.markdown(f"<div class='titre-page'><span>{r['numero']}</span>{r['titre']}</div>", unsafe_allow_html=True)
@@ -416,6 +435,7 @@ def en_tete(numero, titre, periodes=PERIODES, cle="", avec_departement=True, def
             st.markdown(AIDE_COMMUNE)
             if r["url"] in AIDE_PAGES:
                 st.markdown(AIDE_PAGES[r["url"]])
+        partage = st.popover("Partager", icon=":material/share:", type="tertiary")
     periode = None
     if periodes:
         defaut = defaut or periodes[-1]
@@ -429,12 +449,57 @@ def en_tete(numero, titre, periodes=PERIODES, cle="", avec_departement=True, def
     if f and f["page"] == cle and f["col"] in d.columns:
         d = d[d[f["col"]].astype(str) == f["val"]]
         st.button(f"{DIMENSIONS.get(f['col'], f['col'])} : {f['val']}", icon=":material/close:", key=f"retirer_{cle}",
-                  help="Retirer ce filtre", on_click=lambda: st.session_state.pop("filtre_clic", None))
+                  help="Retirer ce filtre", on_click=retirer_filtre)
+    else:
+        f = None
+    ecrire_adresse(partage, r["url"], periode, periodes, dep, f)
     if periode:
         population(d, periode)
     else:
         st.write("")
     return d, periode, dep
+
+
+def retirer_filtre():
+    st.session_state.pop("filtre_clic", None)
+    st.toast("Filtre retiré", icon=":material/filter_alt_off:")
+
+
+def lire_adresse(cle, periodes, avec_departement):
+    """Lien partagé : à la première exécution d'une page, la période, le département et le filtre
+    écrits dans l'adresse sont appliqués aux réglages de la page."""
+    if st.session_state.get("_adresse_lue") == cle:
+        return
+    st.session_state["_adresse_lue"] = cle
+    qp = st.query_params
+    if periodes and qp.get("periode") in periodes:
+        st.session_state[f"per_{cle}"] = qp["periode"]
+    if avec_departement and qp.get("departement") in DEPARTEMENTS:
+        st.session_state[f"dep_{cle}"] = qp["departement"]
+    if ":" in qp.get("filtre", ""):
+        col, val = qp["filtre"].split(":", 1)
+        if col in DIMENSIONS and val in VALEURS_DIM.get(col, ()):
+            st.session_state["filtre_clic"] = {"page": cle, "col": col, "val": val}
+
+
+def ecrire_adresse(partage, url, periode, periodes, dep, filtre):
+    """Les réglages en cours sont recopiés dans l'adresse ; le menu « Partager » affiche le lien à copier."""
+    params = {}
+    if periode and periodes and periode != periodes[-1]:
+        params["periode"] = periode
+    if dep != "Tous":
+        params["departement"] = dep
+    if filtre:
+        params["filtre"] = f"{filtre['col']}:{filtre['val']}"
+    if dict(st.query_params) != params:
+        st.query_params.from_dict(params)
+    base = "/".join(str(st.context.url or "").split("/")[:3])
+    lien = f"{base}/{url}" + (f"?{urlencode(params)}" if params else "")
+    with partage:
+        st.markdown("**Lien vers cette vue**")
+        st.code(lien, language=None, wrap_lines=True)
+        st.caption("Copiez le lien avec l'icône à droite. La personne qui l'ouvre arrive sur cette page, avec la même "
+                   "période, le même département et le même filtre, après s'être connectée avec son propre profil.")
 
 
 AIDE_COMMUNE = """**Comment lire cette page**
@@ -448,6 +513,8 @@ AIDE_COMMUNE = """**Comment lire cette page**
 
 AIDE_PAGES = {
     "vue-ensemble": "**Cette page** : les grands équilibres (effectif, diversité, recrutements, départs) en un coup d'œil.",
+    "assistant": "**Cette page** : questions fréquentes de la DRH. Les réponses sont calculées sur les données, sans IA "
+                 "externe : aucune donnée ne quitte le dashboard.",
     "demographie": "**Cette page** : la structure de l'effectif. « Voir le détail » sous une carte ouvre la liste correspondante.",
     "diversite": "**Cette page** : répartition par génération, genre et niveau d'études. Génération Z : nés après 1996.",
     "tendances": "**Cette page** : évolution semestrielle depuis juin 2022. Cliquez sur une période pour la sélectionner.",
@@ -1263,6 +1330,11 @@ def p_absenteisme():
 # ---------------------------------------------------------------------------
 def p_absences_dep():
     _, per, _ = en_tete(11, "Absences par département", cle="leave", avec_departement=False)
+    _absences_dep_corps(per)
+
+
+@bloc_local
+def _absences_dep_corps(per):
     gauche, droite = st.columns([0.8, 4])
     with gauche:
         st.markdown("<div class='bandeau'>Département</div>", unsafe_allow_html=True)
@@ -1416,52 +1488,8 @@ def p_analyse_departs():
 # ---------------------------------------------------------------------------
 # Anticipation des départs
 # ---------------------------------------------------------------------------
-def p_anticipation():
-    en_tete(15, "Anticipation des départs", periodes=None, cle="antic", avec_departement=False)
-    act, _ = modele_risque()
-    taux, capacite, auc = fiabilite()
-    st.markdown(
-        "<div class='avertissement'><b>Signal statistique à examiner, pas une prédiction individuelle.</b> "
-        "Le score classe les collaborateurs selon leur ressemblance avec les profils partis par le passé. "
-        f"Sa capacité de classement est modérée (AUC {nb(auc, 2)} en validation). La majorité des personnes "
-        "signalées ne partiront pas, et une partie des départs viendra de personnes non signalées. "
-        "Le score ne peut fonder aucune décision défavorable.</div>", unsafe_allow_html=True)
-    st.write("")
-
-    # 1. Fiabilité des niveaux
-    st.markdown("#### 1 · Que valent les niveaux de risque ?")
-    st.caption("Taux de départ réellement observés quand le modèle, entraîné sur le passé, a été appliqué aux 3 dernières "
-               "cohortes connues (validation temporelle).")
-    c1, c2 = st.columns([1.3, 1])
-    with carte(c1):
-        t = taux.reset_index()
-        actuel = act["niveau_risque"].value_counts().reindex(ORDRE_NIVEAUX).fillna(0).astype(int)
-        fig = go.Figure(go.Bar(x=t["niveau"], y=t["taux"], marker_color=[COULEURS_NIVEAU[n] for n in t["niveau"]],
-                               error_y=dict(type="data", symmetric=False, array=t["taux_max"] - t["taux"],
-                                            arrayminus=t["taux"] - t["taux_min"], color=GRIS_FONCE),
-                               text=[f"<b>{pct(x, 0)}</b><br>{int(b)} sur {int(n)}" for x, b, n in
-                                     zip(t["taux"], t["departs"], t["effectif"])], textposition="inside",
-                               insidetextanchor="start", textfont_color="#222"))
-        fig.add_hline(y=taux["departs"].sum() / taux["effectif"].sum(), line_dash="dot", line_color=GRIS_FONCE,
-                      annotation_text=f"taux moyen {pct(taux['departs'].sum() / taux['effectif'].sum(), 0)}",
-                      annotation_position="top right")
-        fig.update_layout(title="Taux de départ observé par niveau (trait : écart entre cohortes)",
-                          yaxis=dict(tickformat=".0%", range=[0, t["taux_max"].max() * 1.35]))
-        graphique(st, fig.update_layout(xaxis_title=None, yaxis_title=None), 320, False)
-    with carte(c2):
-        lect = pd.DataFrame({
-            "Niveau": ORDRE_NIVEAUX,
-            "Règle": ["5 % des scores les plus hauts", "5 à 16 %", "16 à 50 %", "Moitié basse"],
-            "Au 31/12/2024": actuel.values,
-            "Départs observés": [pct(x, 0) for x in taux["taux"]],
-            "Départs captés": [pct(x, 0) for x in taux["part_des_departs"]],
-        })
-        st.dataframe(lect, hide_index=True, width="stretch")
-        st.caption("Lecture : sur 10 collaborateurs « Très élevé », environ "
-                   f"{int(round(taux.loc['Très élevé', 'taux'] * 10))} sont partis dans les 6 mois lors des validations ; "
-                   f"pour « Faible », moins de 1 sur 10.")
-
-    # 2. Capacité d'accompagnement
+@bloc_local
+def _bloc_capacite(act, capacite):
     st.markdown("#### 2 · Combien de collaborateurs la DRH peut-elle accompagner ?")
     c1, c2 = st.columns([1, 2])
     with carte(c1):
@@ -1508,6 +1536,55 @@ def p_anticipation():
                              title="Groupe accompagné : 10 postes les plus représentés", color_discrete_sequence=[GRIS])
                   .update_layout(xaxis_visible=False, yaxis_title=None), 320, False)
 
+
+def p_anticipation():
+    en_tete(15, "Anticipation des départs", periodes=None, cle="antic", avec_departement=False)
+    act, _ = modele_risque()
+    taux, capacite, auc = fiabilite()
+    st.markdown(
+        "<div class='avertissement'><b>Signal statistique à examiner, pas une prédiction individuelle.</b> "
+        "Le score classe les collaborateurs selon leur ressemblance avec les profils partis par le passé. "
+        f"Sa capacité de classement est modérée (AUC {nb(auc, 2)} en validation). La majorité des personnes "
+        "signalées ne partiront pas, et une partie des départs viendra de personnes non signalées. "
+        "Le score ne peut fonder aucune décision défavorable.</div>", unsafe_allow_html=True)
+    st.write("")
+
+    # 1. Fiabilité des niveaux
+    st.markdown("#### 1 · Que valent les niveaux de risque ?")
+    st.caption("Taux de départ réellement observés quand le modèle, entraîné sur le passé, a été appliqué aux 3 dernières "
+               "cohortes connues (validation temporelle).")
+    c1, c2 = st.columns([1.3, 1])
+    with carte(c1):
+        t = taux.reset_index()
+        actuel = act["niveau_risque"].value_counts().reindex(ORDRE_NIVEAUX).fillna(0).astype(int)
+        fig = go.Figure(go.Bar(x=t["niveau"], y=t["taux"], marker_color=[COULEURS_NIVEAU[n] for n in t["niveau"]],
+                               error_y=dict(type="data", symmetric=False, array=t["taux_max"] - t["taux"],
+                                            arrayminus=t["taux"] - t["taux_min"], color=GRIS_FONCE),
+                               text=[f"<b>{pct(x, 0)}</b><br>{int(b)} sur {int(n)}" for x, b, n in
+                                     zip(t["taux"], t["departs"], t["effectif"])], textposition="inside",
+                               insidetextanchor="start", textfont_color="#222"))
+        fig.add_hline(y=taux["departs"].sum() / taux["effectif"].sum(), line_dash="dot", line_color=GRIS_FONCE,
+                      annotation_text=f"taux moyen {pct(taux['departs'].sum() / taux['effectif'].sum(), 0)}",
+                      annotation_position="top right")
+        fig.update_layout(title="Taux de départ observé par niveau (trait : écart entre cohortes)",
+                          yaxis=dict(tickformat=".0%", range=[0, t["taux_max"].max() * 1.35]))
+        graphique(st, fig.update_layout(xaxis_title=None, yaxis_title=None), 320, False)
+    with carte(c2):
+        lect = pd.DataFrame({
+            "Niveau": ORDRE_NIVEAUX,
+            "Règle": ["5 % des scores les plus hauts", "5 à 16 %", "16 à 50 %", "Moitié basse"],
+            "Au 31/12/2024": actuel.values,
+            "Départs observés": [pct(x, 0) for x in taux["taux"]],
+            "Départs captés": [pct(x, 0) for x in taux["part_des_departs"]],
+        })
+        st.dataframe(lect, hide_index=True, width="stretch")
+        st.caption("Lecture : sur 10 collaborateurs « Très élevé », environ "
+                   f"{int(round(taux.loc['Très élevé', 'taux'] * 10))} sont partis dans les 6 mois lors des validations ; "
+                   f"pour « Faible », moins de 1 sur 10.")
+
+    # 2. Capacité d'accompagnement (bloc local : le curseur ne recharge que cette partie)
+    _bloc_capacite(act, capacite)
+
     # 3. Liste (DRH) ou vue agrégée (Direction)
     st.markdown("#### 3 · Qui est concerné ?")
     if not auth.peut_voir_nominatif():
@@ -1552,8 +1629,9 @@ def p_anticipation():
     if o2.button("Ouvrir la fiche ➜", width="stretch", disabled=not len(tab)):
         st.session_state["fiche_id"] = cible
         st.switch_page(PAGE["fiche-collaborateur"])
-    o3.download_button("⬇️ Liste (CSV)", tab.to_csv(index=False).encode("utf-8"), "anticipation_departs.csv",
-                       "text/csv", width="stretch")
+    o3.download_button("Liste (CSV)", tab.to_csv(index=False).encode("utf-8"), "anticipation_departs.csv", "text/csv",
+                       width="stretch", icon=":material/download:",
+                       on_click=lambda: st.toast("Liste téléchargée", icon=":material/check_circle:"))
     st.caption("Liste confidentielle : données individuelles réservées à la DRH. Le genre n'est pas utilisé par ce modèle.")
 
 
@@ -1562,6 +1640,11 @@ def p_anticipation():
 # ---------------------------------------------------------------------------
 def p_profil_departement():
     _, per, _ = en_tete(15, "Profil département", cle="pdep", avec_departement=False)
+    _profil_departement_corps(per)
+
+
+@bloc_local
+def _profil_departement_corps(per):
     gauche, droite = st.columns([0.8, 4])
     with gauche:
         st.markdown("<div class='bandeau'>Département</div>", unsafe_allow_html=True)
@@ -1620,7 +1703,7 @@ def p_profil_departement():
                                          category_orders={"niveau_risque": ORDRE_NIVEAUX})
                               .update_layout(xaxis_title=None, yaxis_title=None), 300)
         with carte(dr):
-            st.markdown("#### 📄 Synthèse")
+            st.markdown("#### Synthèse")
             effs = entreprise.groupby("departement").size().sort_values(ascending=False)
             rang = list(effs.index).index(dep) + 1 if dep in effs.index else None
             femmes = (cur["genre"] == "F").mean()
@@ -1697,27 +1780,32 @@ def p_exports():
                    "les exports ne contiennent que des données agrégées."))
     c1, c2 = st.columns(2)
     with carte(c1):
-        st.markdown("##### 📊 Classeur Excel")
+        st.markdown("##### Classeur Excel")
         st.caption("Lisez-moi et définitions · synthèse par période · départements · rémunération par grade · "
                    "turnover par cohorte · fiabilité des niveaux · anticipation" + (" (agrégée et nominative)" if nominatif
                                                                                      else " (agrégée)")
                    + " · qualité des données · dictionnaire.")
         if st.button("Préparer le classeur", key="prep_xlsx", width="stretch"):
             st.session_state["xlsx"] = exports.excel(d, sc, taux, audit(), contexte, nominatif)
+            st.toast("Classeur prêt à télécharger", icon=":material/task_alt:")
         if "xlsx" in st.session_state:
-            st.download_button("⬇️ Télécharger le classeur (.xlsx)", st.session_state["xlsx"],
+            st.download_button("Télécharger le classeur (.xlsx)", st.session_state["xlsx"],
                                f"TelcomCI_RH_{per.replace(' ', '_')}.xlsx", width="stretch", type="primary",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               icon=":material/download:",
+                               on_click=lambda: st.toast("Classeur Excel téléchargé", icon=":material/check_circle:"))
     with carte(c2):
-        st.markdown("##### 📄 Synthèse PDF")
+        st.markdown("##### Synthèse PDF")
         st.caption("Deux pages pour un comité : à retenir, indicateurs clés, points d'attention, fiabilité des niveaux "
                    "de risque, tableau des départements, méthode et limites. Aucune donnée individuelle.")
         if st.button("Préparer la synthèse", key="prep_pdf", width="stretch"):
             st.session_state["pdf"] = synthese_pdf(d, sc, taux, per, contexte, nominatif)
+            st.toast("Synthèse prête à télécharger", icon=":material/task_alt:")
         if "pdf" in st.session_state:
-            st.download_button("⬇️ Télécharger la synthèse (.pdf)", st.session_state["pdf"],
+            st.download_button("Télécharger la synthèse (.pdf)", st.session_state["pdf"],
                                f"TelcomCI_synthese_RH_{per.replace(' ', '_')}.pdf", "application/pdf",
-                               width="stretch", type="primary")
+                               width="stretch", type="primary", icon=":material/download:",
+                               on_click=lambda: st.toast("Synthèse PDF téléchargée", icon=":material/check_circle:"))
 
 
 def synthese_pdf(d, sc, taux, per, contexte, nominatif):
@@ -1761,11 +1849,206 @@ def synthese_pdf(d, sc, taux, per, contexte, nominatif):
 
 
 # ---------------------------------------------------------------------------
+# Assistant RH : questions guidées, réponses calculées sur les données (aucune IA externe)
+# ---------------------------------------------------------------------------
+import unicodedata
+
+
+def _sans_accents(t):
+    return "".join(c for c in unicodedata.normalize("NFD", t.lower()) if unicodedata.category(c) != "Mn")
+
+
+def _base_assistant():
+    per, coh = PERIODES[-1], PERIODES_HIST[-1]
+    cur = DF[DF["periode"] == per]
+    h = DF[(DF["periode"] == coh) & (DF["jeu"] == "historique")]
+    return per, coh, cur, h
+
+
+def _barres(serie, titre, fmt=None):
+    serie = serie.sort_values()
+    fig = px.bar(x=serie.values, y=serie.index.astype(str), orientation="h", title=titre,
+                 text=[fmt(v) for v in serie.values] if fmt else serie.values, color_discrete_sequence=[JAUNE])
+    return fig.update_layout(xaxis_visible=False, yaxis_title=None)
+
+
+def r_departs_departement():
+    _, coh, _, h = _base_assistant()
+    t = h[h["departement"] != "Non renseigné"].groupby("departement")["target"].agg(["mean", "sum", "size"])
+    t = t.sort_values("mean", ascending=False)
+    top, suiv = t.index[0], t.index[1:3]
+    txt = (f"Sur la cohorte **{coh}**, **{top}** a le taux de départ à 6 mois le plus élevé : **{pct(t.iloc[0]['mean'])}** "
+           f"({int(t.iloc[0]['sum'])} départs sur {int(t.iloc[0]['size'])} collaborateurs), contre "
+           f"**{pct(h['target'].mean())}** pour l'entreprise. Viennent ensuite {suiv[0]} ({pct(t.loc[suiv[0], 'mean'])}) "
+           f"et {suiv[1]} ({pct(t.loc[suiv[1], 'mean'])}).")
+    return txt, _barres(t["mean"], "Taux de départ à 6 mois par département", pct), "analyse-departs"
+
+
+def r_ecart_salarial():
+    per, _, cur, _ = _base_assistant()
+    c = cur[cur["genre"].isin(["F", "M"]) & (cur["departement"] != "Non renseigné")]
+    g = c.groupby(["departement", "genre"])["salaire_mensuel"].mean().unstack()
+    g["ecart"] = g["M"] - g["F"]
+    g["ecart_pct"] = g["ecart"] / g["M"]
+    top = g["ecart_pct"].abs().idxmax()
+    sens = "en faveur des hommes" if g.loc[top, "ecart"] > 0 else "en faveur des femmes"
+    glob = c.groupby("genre")["salaire_mensuel"].mean()
+    txt = (f"Au **{DATES_LIB[per]}**, l'écart de salaire moyen le plus marqué est dans **{top}** : "
+           f"**{fcfa(abs(g.loc[top, 'ecart']))} FCFA** par mois ({pct(abs(g.loc[top, 'ecart_pct']))}) {sens}. "
+           f"À l'échelle de l'entreprise, l'écart H − F est de **{fcfa(glob['M'] - glob['F'])} FCFA**. "
+           "Ces écarts bruts ne tiennent pas compte du grade ni de l'ancienneté : la page Équité salariale les compare "
+           "à grade égal.")
+    return txt, _barres(g["ecart_pct"], "Écart de salaire moyen H − F par département (en % du salaire des hommes)",
+                        pct), "equite-salariale"
+
+
+def r_priorites():
+    act, _ = modele_risque()
+    n = act["niveau_risque"].value_counts()
+    sig = act[act["signale"]]
+    dep = sig["departement"].value_counts()
+    txt = (f"Au 31/12/2024, le modèle classe **{int(n.get('Très élevé', 0))} collaborateurs** en niveau « très élevé » et "
+           f"**{int(n.get('Élevé', 0))}** en niveau « élevé », soit **{pct(act['signale'].mean())}** de l'effectif. "
+           f"Ils sont surtout dans **{dep.index[0]}** ({dep.iloc[0]}) et **{dep.index[1]}** ({dep.iloc[1]}).")
+    if auth.peut_voir_nominatif():
+        top = act.nsmallest(5, "rang_haut")
+        txt += "\n\nLes 5 scores les plus élevés : " + ", ".join(f"**{i}** ({p_})" for i, p_ in zip(top["id"], top["poste"])) + "."
+    else:
+        txt += "\n\nLa liste nominative est réservée au profil DRH."
+    txt += "\n\nRappel : c'est un signal statistique à examiner, pas une prédiction individuelle."
+    return txt, _barres(dep, "Collaborateurs en niveau élevé ou très élevé, par département"), "anticipation"
+
+
+def r_effectif():
+    eff = DF.groupby("periode").size()
+    txt = (f"L'effectif est passé de **{nb(eff.iloc[0])}** collaborateurs au {DATES_LIB[eff.index[0]]} à "
+           f"**{nb(eff.iloc[-1])}** au {DATES_LIB[eff.index[-1]]}, soit **{pct(eff.iloc[-1] / eff.iloc[0] - 1, 0)}** "
+           f"en deux ans et demi. Sur le dernier semestre, la hausse est de **{pct(eff.iloc[-1] / eff.iloc[-2] - 1)}**.")
+    fig = px.line(x=eff.index, y=eff.values, markers=True, title="Effectif par période")
+    fig.update_traces(line_color=JAUNE, line_width=3)
+    return txt, fig.update_layout(xaxis_title=None, yaxis_title=None), "tendances"
+
+
+def r_absences():
+    per, _, cur, _ = _base_assistant()
+    t = cur[cur["departement"] != "Non renseigné"].groupby("departement")["taux_absenteisme"].mean().sort_values(ascending=False)
+    txt = (f"Au **{DATES_LIB[per]}**, **{t.index[0]}** a le taux d'absentéisme le plus élevé : **{pct(t.iloc[0], 2)}**, "
+           f"contre **{pct(cur['taux_absenteisme'].mean(), 2)}** pour l'entreprise. Le plus faible est **{t.index[-1]}** "
+           f"({pct(t.iloc[-1], 2)}).")
+    return txt, _barres(t, "Taux d'absentéisme par département", lambda v: pct(v, 2)), "absenteisme"
+
+
+def r_profils_departs():
+    _, coh, _, h = _base_assistant()
+    morceaux = []
+    for col, lib in [("contrat", "contrat"), ("grade", "grade"), ("tranche_anciennete", "ancienneté")]:
+        t = h.groupby(col, observed=True)["target"].mean().sort_values(ascending=False)
+        morceaux.append(f"par {lib}, **{t.index[0]}** ({pct(t.iloc[0])})")
+    t = h.groupby("tranche_anciennete", observed=True)["target"].mean().reindex(ORDRE_ANC)
+    txt = (f"Sur la cohorte **{coh}** (taux moyen {pct(h['target'].mean())}), les taux de départ les plus élevés sont : "
+           + " ; ".join(morceaux) + ". Ce sont des associations observées, pas des causes.")
+    fig = px.bar(x=t.index, y=t.values, text=[pct(v) for v in t.values], title="Taux de départ par ancienneté",
+                 color_discrete_sequence=[JAUNE])
+    return txt, fig.update_layout(xaxis_title=None, yaxis_visible=False), "caracteristiques-departs"
+
+
+def r_masse_salariale():
+    per, _, cur, _ = _base_assistant()
+    m = cur.groupby("departement")["salaire_mensuel"].sum().sort_values(ascending=False)
+    total = cur["salaire_mensuel"].sum()
+    txt = (f"Au **{DATES_LIB[per]}**, la masse salariale mensuelle est de **{fcfa(total)} FCFA**, pour un salaire moyen de "
+           f"**{fcfa(cur['salaire_mensuel'].mean())} FCFA**. Les trois départements qui pèsent le plus sont "
+           + ", ".join(f"**{d_}** ({pct(v / total, 0)})" for d_, v in m.head(3).items()) + ".")
+    return txt, _barres(m.head(8), "Masse salariale mensuelle par département (8 premiers)", fcfa), "salaires"
+
+
+def r_recrutements():
+    arr = DF.groupby("periode")["arrivee"].sum()
+    dep = DF[DF["jeu"] == "historique"].groupby("periode")["target"].sum()
+    t = pd.DataFrame({"Arrivées": arr, "Départs à 6 mois": dep}).reindex(PERIODES)
+    der = PERIODES_HIST[-1]
+    txt = (f"Sur la cohorte **{der}**, **{int(dep[der])} départs** à 6 mois pour **{int(arr[der])} arrivées** sur le semestre "
+           f"précédent. Les arrivées du dernier semestre ({PERIODES[-1]}) sont au nombre de **{int(arr.iloc[-1])}**. "
+           "L'effectif augmente : les recrutements font plus que compenser les départs.")
+    fig = px.bar(t.reset_index().melt("periode", var_name="type", value_name="n").dropna(), x="periode", y="n", color="type",
+                 barmode="group", title="Arrivées et départs par période",
+                 color_discrete_map={"Arrivées": JAUNE, "Départs à 6 mois": GRIS_FONCE})
+    return txt, fig.update_layout(xaxis_title=None, yaxis_title=None), "arrivees"
+
+
+QUESTIONS = [
+    ("Quel département perd le plus de collaborateurs ?", r_departs_departement,
+     ["depart", "perd", "quitt", "turnover", "demission", "partent", "fuite"], ["departement", "service", "ou"]),
+    ("Quels profils partent le plus ?", r_profils_departs,
+     ["profil", "qui part", "partent le plus", "contrat", "grade", "anciennete", "type"], []),
+    ("Qui accompagner en priorité ?", r_priorites,
+     ["accompagn", "priorit", "risque", "signal", "anticip", "retenir", "fideli", "prevoir", "predi"], []),
+    ("Où l'écart salarial femmes / hommes est-il le plus fort ?", r_ecart_salarial,
+     ["ecart", "femme", "homme", "egalite", "equite", "genre", "parite"], ["salai"]),
+    ("Quel département est le plus absent ?", r_absences, ["absen", "malad", "conge", "presence"], []),
+    ("Combien coûte la masse salariale ?", r_masse_salariale,
+     ["masse", "cout", "budget", "paie", "combien coute", "salaire total", "salaire"], []),
+    ("Comment évolue l'effectif ?", r_effectif, ["effectif", "evolu", "croissance", "combien de collab", "taille", "grandi"], []),
+    ("Les recrutements compensent-ils les départs ?", r_recrutements,
+     ["recrut", "arriv", "embauch", "compens", "remplac", "nouveaux"], []),
+]
+
+
+def trouver_question(texte):
+    t = _sans_accents(texte)
+    scores = []
+    for i, (q, _, mots, bonus) in enumerate(QUESTIONS):
+        sc = sum(2 for m in mots if m in t) + sum(1 for m in bonus if m in t)
+        scores.append((sc, -i))
+    meilleur = max(scores)
+    return -meilleur[1] if meilleur[0] > 0 else None
+
+
+def p_assistant():
+    en_tete(2, "Assistant RH", periodes=None, cle="assistant", avec_departement=False)
+    hist = st.session_state.setdefault("assistant_hist", [])
+    with st.chat_message("assistant", avatar=":material/insights:"):
+        st.markdown("Bonjour. Je réponds à vos questions sur les effectifs, les salaires, l'absentéisme et les départs, "
+                    f"à partir des données au **{DATES_LIB[PERIODES[-1]]}**. Chaque réponse est calculée directement sur "
+                    "les données du dashboard. Choisissez une question ci-dessous ou écrivez la vôtre.")
+    for i, (question, idx) in enumerate(hist):
+        with st.chat_message("user", avatar=":material/person:"):
+            st.markdown(question)
+        with st.chat_message("assistant", avatar=":material/insights:"):
+            if idx is None:
+                st.markdown("Je ne sais pas encore répondre à cette question. Voici celles que je maîtrise : "
+                            + " · ".join(f"*{q}*" for q, *_ in QUESTIONS))
+                continue
+            texte, fig, page = QUESTIONS[idx][1]()
+            st.markdown(texte)
+            if fig is not None:
+                with carte(st):
+                    graphique(st, fig, 260, False, cliquable=False)
+            if page in PAGE:
+                st.page_link(PAGE[page], label=f"Ouvrir la page « {PAGE[page].title} »", icon=":material/arrow_forward:")
+    choix = st.pills("Questions proposées", [q for q, *_ in QUESTIONS], key=f"q_assistant_{len(hist)}",
+                     label_visibility="collapsed")
+    _, c2 = st.columns([6, 1], vertical_alignment="center")
+    texte = st.chat_input("Écrivez votre question, par exemple : quel département a le plus d'absences ?")
+    if hist and c2.button("Effacer", icon=":material/delete_sweep:", width="stretch", type="tertiary"):
+        st.session_state["assistant_hist"] = []
+        st.rerun()
+    question = choix or texte
+    if question:
+        idx = next((i for i, (q, *_) in enumerate(QUESTIONS) if q == question), None)
+        if idx is None:
+            idx = trouver_question(question)
+        hist.append((question, idx))
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
 REGISTRE = [
     # (section, titre, fonction, url, icône, réservé au profil nominatif)
     ("Pilotage", "Vue d'ensemble RH", p_vue_ensemble, "vue-ensemble", "dashboard", False),
+    ("Pilotage", "Assistant RH", p_assistant, "assistant", "forum", False),
     ("Effectifs", "Analyse démographique", p_demographie, "demographie", "groups", False),
     ("Effectifs", "Diversité", p_diversite, "diversite", "diversity_3", False),
     ("Effectifs", "Historique et tendances", p_tendances, "tendances", "timeline", False),
@@ -1785,8 +2068,13 @@ REGISTRE = [
 ]
 
 if not auth.utilisateur():
-    st.navigation([st.Page(auth.page_connexion, title="Connexion", icon=":material/lock:", url_path="connexion")],
-                  position="hidden").run()
+    # Toutes les adresses mènent à la connexion : un lien partagé (page + réglages) est ainsi conservé,
+    # et la page demandée s'ouvre directement une fois connecté.
+    connexion = [st.Page(auth.page_connexion, title="Connexion", icon=":material/lock:", url_path="connexion",
+                         default=True)]
+    connexion += [st.Page(lambda: auth.page_connexion(), title="Connexion", url_path=url) for _, _, _, url, _, _ in REGISTRE]
+    connexion += [st.Page(lambda: auth.page_connexion(), title="Connexion", url_path="accueil")]
+    st.navigation(connexion, position="hidden").run()
     st.stop()
 
 REGISTRE_VISIBLE = []
@@ -1799,8 +2087,8 @@ PAGE = {r["url"]: st.Page(r["fn"], title=r["titre"], icon=f":material/{r['icone'
         for r in REGISTRE_VISIBLE}
 ACCUEIL = st.Page(p_accueil, title="Accueil", icon=":material/home:", url_path="accueil", default=True)
 ORDRE = [ACCUEIL] + [PAGE[r["url"]] for r in REGISTRE_VISIBLE]
-SECTIONS = {"": [ACCUEIL, PAGE["vue-ensemble"]]}
-for r in REGISTRE_VISIBLE[1:]:
+SECTIONS = {"": [ACCUEIL, PAGE["vue-ensemble"], PAGE["assistant"]]}
+for r in REGISTRE_VISIBLE[2:]:
     SECTIONS.setdefault(r["section"], []).append(PAGE[r["url"]])
 COURANTE = st.navigation(SECTIONS, position="top")
 COURANTE.run()
