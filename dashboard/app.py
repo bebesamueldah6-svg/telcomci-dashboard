@@ -18,6 +18,7 @@ from plotly.subplots import make_subplots
 import assistant as moteur
 import auth
 import exports
+import rapport
 import qualite
 from anticipation import (FAMILLES, ORDRE_NIVEAUX, auc_validation, contributions, courbe_capacite, explication,
                           niveau_depuis_rang, rang_depuis_le_haut, taux_par_niveau, validation_temporelle,
@@ -1053,6 +1054,21 @@ def p_fiche():
             f"<b>Score plus élevé que {nb((1 - p['rang_haut'] - 1 / len(act)) * 100, 1)} %</b><br>"
             f"<span class='note'>des collaborateurs au 31/12/2024</span></div>",
             unsafe_allow_html=True)
+        st.write("")
+        prete = st.session_state.get("fiche_entretien", (None, None))
+        if prete[0] != p["id"]:
+            if st.button("Préparer la fiche entretien", icon=":material/description:", width="stretch",
+                         help="Une page PDF à imprimer avant un entretien de rétention"):
+                with st.spinner("Mise en page de la fiche…"):
+                    sig, nua, man = explication(contrib.loc[k], p, act)
+                    st.session_state["fiche_entretien"] = (p["id"], rapport.fiche_entretien(
+                        p, sig, nua, man, tn["taux"], {"engagement_median": pairs["engagement_actuel"].median()},
+                        {"utilisateur": auth.utilisateur()["nom"]}))
+                st.rerun()
+        else:
+            st.download_button("Télécharger la fiche entretien (PDF)", prete[1], f"TelcomCI_fiche_entretien_{p['id']}.pdf",
+                               "application/pdf", type="primary", width="stretch", icon=":material/download:",
+                               on_click=lambda: st.toast("Fiche entretien téléchargée", icon=":material/check_circle:"))
     with droite:
         o = st.tabs(["Informations", "Poste", "Rémunération", "Absences", "Performance & engagement",
                      "Pourquoi ce signal ?"])
@@ -1946,13 +1962,14 @@ def p_exports():
                    "les exports ne contiennent que des données agrégées."))
     c1, c2 = st.columns(2)
     with carte(c1):
-        st.markdown("##### Classeur Excel")
-        st.caption("Lisez-moi et définitions · synthèse par période · départements · rémunération par grade · "
-                   "turnover par cohorte · fiabilité des niveaux · anticipation" + (" (agrégée et nominative)" if nominatif
-                                                                                     else " (agrégée)")
-                   + " · qualité des données · dictionnaire.")
+        st.markdown("##### Classeur RH (Excel)")
+        st.caption("S'ouvre sur une couverture avec sommaire cliquable et un tableau de bord (indicateurs clés et "
+                   "graphiques Excel modifiables), puis les données mises en forme : synthèse par période, départements, "
+                   "rémunération par grade, turnover, fiabilité des niveaux, anticipation"
+                   + (" (agrégée et nominative)" if nominatif else " (agrégée)") + ", qualité des données.")
         if st.button("Préparer le classeur", key="prep_xlsx", width="stretch"):
-            st.session_state["xlsx"] = exports.excel(d, sc, taux, audit(), contexte, nominatif)
+            with st.spinner("Construction du classeur…"):
+                st.session_state["xlsx"] = exports.excel(d, sc, taux, audit(), contexte, nominatif)
             st.toast("Classeur prêt à télécharger", icon=":material/task_alt:")
         if "xlsx" in st.session_state:
             st.download_button("Télécharger le classeur (.xlsx)", st.session_state["xlsx"],
@@ -1961,57 +1978,26 @@ def p_exports():
                                icon=":material/download:",
                                on_click=lambda: st.toast("Classeur Excel téléchargé", icon=":material/check_circle:"))
     with carte(c2):
-        st.markdown("##### Synthèse PDF")
-        st.caption("Deux pages pour un comité : à retenir, indicateurs clés, points d'attention, fiabilité des niveaux "
-                   "de risque, tableau des départements, méthode et limites. Aucune donnée individuelle.")
-        if st.button("Préparer la synthèse", key="prep_pdf", width="stretch"):
-            st.session_state["pdf"] = synthese_pdf(d, sc, taux, per, contexte, nominatif)
-            st.toast("Synthèse prête à télécharger", icon=":material/task_alt:")
+        st.markdown("##### Bilan RH semestriel (PDF)")
+        st.caption("Rapport de 6 pages pour un comité : couverture, synthèse avec évolutions et trois messages clés, "
+                   "effectifs et diversité, rémunération, absentéisme, turnover et anticipation, plan d'action proposé, "
+                   "méthode et limites. Aucune donnée individuelle.")
+        if st.button("Préparer le bilan", key="prep_pdf", width="stretch"):
+            with st.spinner("Mise en page du bilan…"):
+                st.session_state["pdf"] = synthese_pdf(d, sc, taux, per, contexte, nominatif)
+            st.toast("Bilan prêt à télécharger", icon=":material/task_alt:")
         if "pdf" in st.session_state:
-            st.download_button("Télécharger la synthèse (.pdf)", st.session_state["pdf"],
-                               f"TelcomCI_synthese_RH_{per.replace(' ', '_')}.pdf", "application/pdf",
+            st.download_button("Télécharger le bilan (.pdf)", st.session_state["pdf"],
+                               f"TelcomCI_bilan_RH_{per.replace(' ', '_')}.pdf", "application/pdf",
                                width="stretch", type="primary", icon=":material/download:",
-                               on_click=lambda: st.toast("Synthèse PDF téléchargée", icon=":material/check_circle:"))
+                               on_click=lambda: st.toast("Bilan PDF téléchargé", icon=":material/check_circle:"))
 
 
 def synthese_pdf(d, sc, taux, per, contexte, nominatif):
-    cur = d[d["periode"] == per]
+    """Bilan RH semestriel (PDF de 6 pages aux couleurs de TelcomCI), voir rapport.py."""
     coh = cohorte(per)
-    hc = d[(d["periode"] == coh) & (d["jeu"] == "historique")]
-    prec = precedente(per)
-    avant = d[d["periode"] == prec] if prec else None
-    evol = (len(cur) / len(avant) - 1) if avant is not None and len(avant) else None
-    synthese = (f"Au {DATES_LIB[per]}, le périmètre compte {nb(len(cur))} collaborateurs"
-                + (f" ({pct(evol)} en six mois)" if evol is not None else "") + ". "
-                f"Sur la dernière cohorte connue ({coh}), {int(hc['target'].sum())} collaborateurs sur {nb(len(hc))} sont "
-                f"partis dans les six mois ({pct(hc['target'].mean())}). Le taux d'absentéisme est de "
-                f"{pct(cur['taux_absenteisme'].mean(), 2)}. {pct((cur['ratio_salaire_reference'] < 0.9).mean(), 0)} des "
-                f"collaborateurs sont payés sous 90 % de la référence de leur grade, l'une des caractéristiques les plus "
-                f"associées aux départs observés, avec un engagement faible.")
-    kpis = [("Effectif", nb(len(cur)), f"au {DATES_LIB[per]}"),
-            ("Masse salariale mensuelle", f"{fcfa(cur['salaire_mensuel'].sum())} FCFA", "salaires de base"),
-            ("Salaire médian", f"{nb(cur['salaire_mensuel'].median())} FCFA", ""),
-            ("Taux d'absentéisme", pct(cur["taux_absenteisme"].mean(), 2), f"jours d'absence ÷ {JOURS_OUVRES_6M} jours ouvrés"),
-            ("Performance moyenne", f"{nb(cur['performance_actuelle'].mean(), 2)} / 5",
-             f"renseignée pour {pct(cur['performance_actuelle'].notna().mean(), 0)} de l'effectif"),
-            ("Taux de départ à 6 mois", pct(hc["target"].mean()), f"cohorte {coh} : {int(hc['target'].sum())} sur {nb(len(hc))}"),
-            ("Niveau de risque très élevé ou élevé", nb(sc["signale"].sum()), "au 31/12/2024")]
-    alertes = [f"{nb((cur['ratio_salaire_reference'] < 0.9).sum())} collaborateurs payés sous 90 % de la référence de leur grade.",
-               f"{len(cur[(cur['performance_actuelle'] >= 4) & (cur['engagement_actuel'] < 3)])} profils performants mais "
-               f"peu engagés (performance ≥ 4 et engagement < 3).",
-               f"{int(cur['performance_actuelle'].isna().sum())} évaluations de performance manquantes."]
-    niveaux = pd.DataFrame({"part": ["5 %", "11 %", "34 %", "50 %"], "taux": [pct(x, 0) for x in taux["taux"]],
-                            "fourchette": [f"{pct(a, 0)} à {pct(b, 0)}" for a, b in zip(taux["taux_min"], taux["taux_max"])]},
-                           index=ORDRE_NIVEAUX)
-    t = DF[DF["periode"] == per].groupby("departement").agg(Effectif=("id", "size"),
-                                                            Absentéisme=("taux_absenteisme", "mean"))
-    td = DF[DF["periode"] == coh].groupby("departement")["target"].agg(["sum", "size", "mean"])
-    t = t.join(td).reset_index().sort_values("Effectif", ascending=False)
-    deps = pd.DataFrame({"Département": t["departement"], "Effectif": t["Effectif"].map(nb),
-                         "Absentéisme": t["Absentéisme"].map(lambda v: pct(v, 2)),
-                         f"Départs {coh}": [f"{int(a)} sur {int(n)}" if n == n else "—" for a, n in zip(t["sum"], t["size"])],
-                         "Taux de départ": t["mean"].map(pct)})
-    return exports.pdf(synthese, kpis, alertes, niveaux, deps, contexte, nominatif)
+    return rapport.bilan(d, sc, taux, per, precedente(per), coh, precedente(coh, PERIODES_HIST), contexte, nominatif,
+                         DATES_LIB.to_dict(), JOURS_OUVRES_6M, ORDRE_AGE)
 
 
 # ---------------------------------------------------------------------------

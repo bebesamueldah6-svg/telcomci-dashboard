@@ -1,0 +1,2 @@
+Police Inter (Rasmus Andersson), SIL Open Font License 1.1 : https://github.com/rsms/inter
+Fichiers TTF issus du paquet @expo-google-fonts/inter 0.2.3. Utilisée pour les exports PDF et les graphiques.
