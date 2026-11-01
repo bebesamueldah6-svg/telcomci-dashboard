@@ -1,6 +1,6 @@
 """TelcomCI · HR Analytics — dashboard RH sur le modèle « cycle de vie du collaborateur ».
 
-Une page d'accueil et quinze pages thématiques, appliquées aux données TelcoPeople.
+Une page d'accueil et quinze pages thématiques, appliquées aux données TelcomCI.
 Lancement local :  streamlit run dashboard/app.py
 """
 import numpy as np
@@ -351,7 +351,7 @@ def p_accueil():
 
     act = DF[DF["jeu"] == "actuel"]
     st.markdown(f"<div class='note' style='text-align:center'>Cliquez sur un thème pour ouvrir son tableau de bord.<br>"
-                f"Données TelcoPeople : {len(act)} collaborateurs au 31/12/2024, historique semestriel depuis juin 2022, "
+                f"Données TelcomCI : {len(act)} collaborateurs au 31/12/2024, historique semestriel depuis juin 2022, "
                 f"départs connus jusqu'à la cohorte du 30/06/2024. "
                 f"Absentéisme = jours d'absence sur 6 mois ÷ {JOURS_OUVRES_6M} jours ouvrés · "
                 f"Départ = départ dans les 6 mois suivant la date de référence · "
@@ -603,7 +603,7 @@ def p_fiche():
                                              "données, seul un échange permet de le connaître"))
             st.markdown("**À vérifier humainement**")
             st.table(pd.DataFrame(verif, columns=["Point", "Détail"]).style.hide(axis="index"))
-            st.markdown("<div class='note'>Les effets sont mesurés par rapport à un collaborateur moyen de TelcoPeople. "
+            st.markdown("<div class='note'>Les effets sont mesurés par rapport à un collaborateur moyen de TelcomCI. "
                         "Ils expliquent le calcul du score ; ce sont des associations statistiques, pas des causes. "
                         "Le genre n'est pas utilisé par ce modèle. Aucune décision défavorable ne peut être fondée "
                         "sur ce score.</div>", unsafe_allow_html=True)
@@ -1424,7 +1424,7 @@ def p_exports():
             st.session_state["xlsx"] = exports.excel(d, sc, taux, audit(), contexte, nominatif)
         if "xlsx" in st.session_state:
             st.download_button("⬇️ Télécharger le classeur (.xlsx)", st.session_state["xlsx"],
-                               f"TelcoPeople_RH_{per.replace(' ', '_')}.xlsx", width="stretch", type="primary",
+                               f"TelcomCI_RH_{per.replace(' ', '_')}.xlsx", width="stretch", type="primary",
                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with c2.container(border=True):
         st.markdown("##### 📄 Synthèse PDF")
@@ -1434,7 +1434,7 @@ def p_exports():
             st.session_state["pdf"] = synthese_pdf(d, sc, taux, per, contexte, nominatif)
         if "pdf" in st.session_state:
             st.download_button("⬇️ Télécharger la synthèse (.pdf)", st.session_state["pdf"],
-                               f"TelcoPeople_synthese_RH_{per.replace(' ', '_')}.pdf", "application/pdf",
+                               f"TelcomCI_synthese_RH_{per.replace(' ', '_')}.pdf", "application/pdf",
                                width="stretch", type="primary")
 
 

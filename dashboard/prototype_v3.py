@@ -203,7 +203,7 @@ def vue_ensemble():
         ecart = v_dep - d[d["periode"] == coh_prec]["target"].mean()
         tendance_dep = ("en hausse" if ecart > 0.005 else "en baisse" if ecart < -0.005 else "stable") + \
                        f" par rapport à la cohorte {coh_prec}"
-    phrase = (f"Au <b>{libelle_date(per)}</b>, {'TelcoPeople' if dep.startswith('Tous') else dep} compte "
+    phrase = (f"Au <b>{libelle_date(per)}</b>, {'TelcomCI' if dep.startswith('Tous') else dep} compte "
               f"<b>{nb(v_eff)} collaborateurs</b>"
               + (f" ({pct(evol)} en six mois, dont {arrivees} arrivées récentes)" if evol is not None else "")
               + f". Sur la dernière cohorte connue ({coh}), <b>{n_dep} collaborateurs sur {nb(n_coh)}</b> "

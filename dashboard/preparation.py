@@ -1,4 +1,4 @@
-"""Chargement, nettoyage et modèle de risque pour le dashboard RH TelcoPeople.
+"""Chargement, nettoyage et modèle de risque pour le dashboard RH TelcomCI.
 
 Reprend exactement le nettoyage et les variables du notebook 12_modele_final_v2.ipynb.
 """

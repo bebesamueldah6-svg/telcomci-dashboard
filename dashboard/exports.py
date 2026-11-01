@@ -205,7 +205,7 @@ def pdf(synthese, kpis, alertes, niveaux, departements, contexte, nominatif):
         canvas.setFont("Helvetica", 7.5)
         canvas.setFillColor(colors.HexColor("#5B6472"))
         conf = "Diffusion restreinte DRH" if nominatif else "Document interne · données agrégées"
-        canvas.drawString(2 * cm, 1.2 * cm, f"TelcoPeople · Pilotage RH · {conf} · exporté le "
+        canvas.drawString(2 * cm, 1.2 * cm, f"TelcomCI · Pilotage RH · {conf} · exporté le "
                                              f"{datetime.now().strftime('%d/%m/%Y')} par {contexte['utilisateur']}")
         canvas.drawRightString(A4[0] - 2 * cm, 1.2 * cm, f"Page {doc.page}")
         canvas.setStrokeColor(encre)
@@ -235,7 +235,7 @@ def pdf(synthese, kpis, alertes, niveaux, departements, contexte, nominatif):
               tableau([list(departements.columns)] + departements.astype(str).values.tolist(),
                       [3.2 * cm, 2.4 * cm, 3.2 * cm, 3.4 * cm, 4.8 * cm]),
               Spacer(1, 10),
-              Paragraph("Méthode et limites : données semestrielles TelcoPeople (juin 2022 à décembre 2024). "
+              Paragraph("Méthode et limites : données semestrielles TelcomCI (juin 2022 à décembre 2024). "
                         "Départs connus jusqu'à la cohorte de juin 2024. Les associations statistiques présentées ne "
                         "démontrent aucune causalité. Le score de risque est un outil de priorisation des échanges RH ; "
                         "il ne peut fonder aucune décision défavorable (sanction, rémunération, promotion, formation).", st_n)]
