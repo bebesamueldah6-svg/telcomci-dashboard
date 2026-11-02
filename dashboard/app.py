@@ -1720,11 +1720,10 @@ def p_performance():
     hs = hc if cat == "Toutes" else hc[hc["categorie_perf"] == cat]
     c1, c2, c3, c4 = st.columns([0.9, 0.9, 1.5, 1.6])
     with c1:
-        st.markdown(f"<div class='tuile'><div class='libelle'><b>Départs ({coh})</b></div>"
-                    f"<div class='libelle'>CDI</div><div class='valeur'>{nb(hs.loc[hs['contrat'] == 'CDI', 'target'].sum())}</div>"
-                    f"<div class='libelle'>CDD</div><div class='valeur'>{nb(hs.loc[hs['contrat'] == 'CDD', 'target'].sum())}</div>"
-                    f"<div class='libelle'>Taux</div><div class='valeur'>{pct(hs['target'].mean())}</div></div>",
-                    unsafe_allow_html=True)
+        tuile(st, f"Départs à 6 mois ({coh}) · CDI {nb(hs.loc[hs['contrat'] == 'CDI', 'target'].sum())} · "
+                  f"CDD {nb(hs.loc[hs['contrat'] == 'CDD', 'target'].sum())}", nb(hs["target"].sum()), "🚪")
+        st.write("")
+        tuile(st, "Taux de départ", pct(hs["target"].mean()), "📉")
     with c2:
         tuile(st, "Effectif", nb(len(sel)), "👥")
         st.write("")
