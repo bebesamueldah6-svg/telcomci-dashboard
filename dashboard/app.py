@@ -127,41 +127,20 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# Fond des pages (proposition : ?fond=gris | creme | lueur | points | anneau)
+# Fond des pages : crème chaud ; l'accueil ajoute un grand anneau orange en filigrane (voir p_accueil).
+# La page de connexion garde son propre fond.
 _FOND_APP = '[data-testid="stApp"], [data-testid="stAppViewContainer"], header[data-testid="stHeader"]'
-FONDS = {
-    "blanc": "",
-    "gris": f"""{_FOND_APP} {{background: #F3F3F3 !important;}}
-      .st-key-entete {{background: #FFFFFF !important; border: 1px solid #E6E6E6;}}
-      .population {{background: #FFFFFF !important;}}""",
-    "creme": f"""{_FOND_APP} {{background: #FAF7F2 !important;}}
-      .st-key-entete {{background: #FFFFFF !important; border: 1px solid #EFE7DC;}}
-      .population {{background: #FFFFFF !important; border-color: #EFE7DC !important;}}""",
-    "lueur": f"""{_FOND_APP} {{background:
-        radial-gradient(900px 520px at 100% 0%, rgba(255,121,0,.10), transparent 60%),
-        radial-gradient(700px 500px at 0% 100%, rgba(0,0,0,.05), transparent 60%), #F6F6F6 !important;
-        background-attachment: fixed !important;}}
-      header[data-testid="stHeader"] {{background: transparent !important;}}
-      .st-key-entete {{background: rgba(255,255,255,.85) !important; border: 1px solid #ECECEC;
-        backdrop-filter: blur(6px);}}
-      .population {{background: rgba(255,255,255,.9) !important;}}""",
-    "points": f"""{_FOND_APP} {{background-color: #F7F7F7 !important;
-        background-image: radial-gradient(#DADADA 1px, transparent 1px) !important; background-size: 22px 22px !important;
-        background-attachment: fixed !important;}}
-      header[data-testid="stHeader"] {{background: rgba(247,247,247,.92) !important;}}
-      .st-key-entete {{background: #FFFFFF !important; border: 1px solid #E6E6E6;}}
-      .population {{background: #FFFFFF !important;}}""",
-    "anneau": f"""{_FOND_APP} {{background-color: #F5F5F5 !important;
-        background-image: radial-gradient(circle at calc(100% + 120px) calc(100% + 120px), transparent 330px,
-          rgba(255,121,0,.10) 331px, rgba(255,121,0,.10) 400px, transparent 401px) !important;
-        background-attachment: fixed !important;}}
-      header[data-testid="stHeader"] {{background: rgba(245,245,245,.92) !important;}}
-      .st-key-entete {{background: #FFFFFF !important; border: 1px solid #E6E6E6;}}
-      .population {{background: #FFFFFF !important;}}""",
-}
-if st.query_params.get("fond") in FONDS:
-    st.session_state["fond"] = st.query_params["fond"]
-st.markdown(f"<style>{FONDS.get(st.session_state.get('fond', 'blanc'), '')}</style>", unsafe_allow_html=True)
+CREME = "#FAF7F2"
+FOND_PAGES = f"""{_FOND_APP} {{background: {CREME} !important;}}
+  .st-key-entete {{background: #FFFFFF !important; border: 1px solid #EFE7DC;}}
+  .population {{background: #FFFFFF !important; border-color: #EFE7DC !important;}}"""
+FOND_ANNEAU = f"""{_FOND_APP} {{background-color: {CREME} !important;
+    background-image: radial-gradient(circle at calc(100% + 120px) calc(100% + 120px), transparent 330px,
+      rgba(255,121,0,.11) 331px, rgba(255,121,0,.11) 400px, transparent 401px) !important;
+    background-attachment: fixed !important;}}
+  header[data-testid="stHeader"] {{background: rgba(250,247,242,.92) !important;}}"""
+if auth.utilisateur():
+    st.markdown(f"<style>{FOND_PAGES}</style>", unsafe_allow_html=True)
 
 # Mise en avant au survol : l'élément pointé monte légèrement, prend un contour orange et un fond orange pâle
 CARTE = 'div[class*="st-key-carte-"]'
@@ -677,6 +656,7 @@ def cohorte(periode):
 def p_accueil():
     """Accueil : les pages disposées autour de l'anneau « cycle de vie », regroupées par domaine (liens natifs)."""
     u = auth.utilisateur()
+    st.markdown(f"<style>{FOND_ANNEAU}</style>", unsafe_allow_html=True)
     # sur la page anneau, on navigue uniquement par les titres autour du cercle : la barre du haut est masquée
     st.markdown("<style>[data-testid='stTopNavigation'], header nav, header [data-testid='stNavSection'] "
                 "{display:none !important;}</style>", unsafe_allow_html=True)
