@@ -23,7 +23,7 @@ import qualite
 from anticipation import (FAMILLES, ORDRE_NIVEAUX, auc_validation, contributions, courbe_capacite, explication,
                           niveau_depuis_rang, rang_depuis_le_haut, taux_par_niveau, validation_temporelle,
                           variables_modele)
-from preparation import JOURS_OUVRES_6M, charger, entrainer_modele
+from preparation import JOURS_OUVRES_6M, charger, creer_variables, entrainer_modele
 
 st.set_page_config(page_title="TelcomCI · HR Analytics", page_icon=":material/insights:", layout="wide",
                    initial_sidebar_state="collapsed")
@@ -99,6 +99,9 @@ st.markdown(f"""
   .pont .t-svg, .pont svg {{width:26px; height:26px; flex-shrink:0; color:#F16E00;}}
   div[class*="st-key-vers-"] a {{padding:0;}}
   div[class*="st-key-vers-"] a p {{color:#F16E00 !important; font-weight:700; font-size:.85rem;}}
+  .pc-lecture {{background:#000; color:#E0E0E0; border-radius:12px; padding:12px 16px; margin-top:12px;
+       font-size:.95rem; line-height:1.5;}}
+  .pc-lecture b {{color:#FF7900;}}
   .reco-prio {{text-align: center; font-weight: 800; border-radius: 999px; padding: 6px 4px; font-size: .85rem;}}
   .reco-constat {{font-weight: 800; color: #000; font-size: 1.02rem;}}
   .reco-action {{color: #333; margin: 4px 0 2px 0;}}
@@ -232,12 +235,19 @@ def donnees():
     return df, feats
 
 
-@st.cache_resource(show_spinner="Calcul des scores de risque…")
-def modele_risque():
-    """Modèle du dashboard (genre et source SIRH exclus), scores et contributions au 31/12/2024."""
+@st.cache_resource(show_spinner="Entraînement du modèle…")
+def modele_entraine():
+    """Modèle du dashboard (genre et source SIRH exclus), entraîné sur tout l'historique."""
     df, feats = donnees()
     fm = variables_modele(feats)
-    modele = entrainer_modele(df, fm)
+    return entrainer_modele(df, fm), fm
+
+
+@st.cache_resource(show_spinner="Calcul des scores de risque…")
+def modele_risque():
+    """Scores et contributions au 31/12/2024."""
+    df, _ = donnees()
+    modele, fm = modele_entraine()
     act = df[df["jeu"] == "actuel"].reset_index(drop=True).copy()
     act["probabilite"] = modele.predict_proba(act[fm])[:, 1]
     act["rang_haut"] = rang_depuis_le_haut(act["probabilite"])
@@ -694,6 +704,9 @@ AIDE_PAGES = {
     "recommandations": "**Cette page** : plan d'action établi par des règles explicites (turnover nettement au-dessus "
                        "de la moyenne, salaires sous 90 % de la référence, profils performants peu engagés, "
                        "absentéisme élevé, écart F/H, évaluations manquantes). Identique au bilan PDF.",
+    "simulateur": "**Cette page** : coût d'une mesure de rétention contre coût des départs évités, sur un an. "
+                  "Le modèle recalcule la probabilité de départ de chaque collaborateur ciblé après l'action ; "
+                  "départs attendus = somme des probabilités (deux semestres).",
     "demographie": "**Cette page** : la structure de l'effectif. « Voir le détail » sous une carte ouvre la liste correspondante.",
     "diversite": "**Cette page** : répartition par génération, genre et niveau d'études. Génération Z : nés après 1996.",
     "tendances": "**Cette page** : évolution semestrielle depuis juin 2022. Cliquez sur une période pour la sélectionner.",
@@ -2737,6 +2750,130 @@ def p_recommandations():
                 dr.page_link(PAGE[a["page"]], label=f"Voir : {PAGE[a['page']].title}", icon=":material/arrow_forward:")
 
 
+
+# ---------------------------------------------------------------------------
+# Simulateur d'actions : coût d'une mesure de rétention contre coût des départs évités
+# ---------------------------------------------------------------------------
+CIBLES_SIMU = {
+    "Signalés payés sous 90 % de la référence": lambda a: a["signale"] & (a["ratio_salaire_reference"] < .9),
+    "Tous les collaborateurs sous 90 % de la référence": lambda a: a["ratio_salaire_reference"] < .9,
+    "Tous les collaborateurs signalés": lambda a: a["signale"],
+}
+
+
+@st.cache_data(show_spinner="Simulation…")
+def simuler(cible_nom, dep, niveau, gain_eng):
+    """Probabilités de départ à 6 mois avant / après l'action, pour chaque collaborateur ciblé, et hausse de salaire."""
+    modele, fm = modele_entraine()
+    act = modele_risque()[0]
+    brut = DF[DF["jeu"] == "actuel"].reset_index(drop=True).copy()
+    cible = CIBLES_SIMU[cible_nom](act).fillna(False).values
+    if dep != "Tous":
+        cible &= (act["departement"] == dep).values
+    hausse = np.zeros(len(brut))
+    if niveau:
+        hausse = np.nan_to_num(np.where(cible, np.maximum(brut["reference_salaire_grade"] * niveau / 100
+                                                          - brut["salaire_mensuel"], 0), 0))
+        brut["salaire_mensuel"] = brut["salaire_mensuel"] + hausse
+    if gain_eng:
+        brut.loc[cible, "engagement_actuel"] = (brut.loc[cible, "engagement_actuel"] + gain_eng).clip(upper=5)
+    apres = modele.predict_proba(creer_variables(brut)[fm])[:, 1]
+    res = act.loc[cible, ["id", "departement", "grade", "poste", "salaire_mensuel", "ratio_salaire_reference",
+                          "engagement_actuel", "niveau_risque", "probabilite"]].copy()
+    res["apres"] = apres[cible]
+    res["hausse"] = hausse[cible]
+    return res
+
+
+def p_simulateur():
+    _, _, dep = en_tete(4, "Simulateur d'actions", periodes=None, cle="simu")
+    st.markdown("<div class='avertissement'><b>Ordre de grandeur pour arbitrer, pas une promesse.</b> Le modèle "
+                "mesure des associations, pas des causes : augmenter un collaborateur ne garantit pas qu'il reste. "
+                "Les probabilités sont fiables en volume (366 départs prédits pour 365 observés sur les 3 cohortes de "
+                "validation).</div>", unsafe_allow_html=True)
+    st.write("")
+    g, dr = st.columns([1.05, 2.6], gap="medium")
+    with carte(g):
+        st.markdown("**1 · Qui cibler ?**")
+        cible = st.radio("Cible", list(CIBLES_SIMU), key="simu_cible", label_visibility="collapsed")
+        st.markdown("**2 · Quelle action ?**")
+        sal = st.toggle("Rattrapage salarial", value=True, key="simu_sal")
+        niveau = st.slider("Porter le salaire à (% de la référence du grade)", 85, 100, 90, 5, key="simu_niv",
+                           disabled=not sal, format="%d %%")
+        eng = st.toggle("Plan d'engagement (carrière, formation, mobilité)", value=False, key="simu_eng")
+        gain = st.slider("Gain d'engagement supposé (points sur 5)", 0.25, 1.0, 0.5, 0.25, key="simu_gain",
+                         disabled=not eng)
+        budget = st.number_input("Budget par personne et par an (FCFA)", 0, 5_000_000, 300_000, 50_000,
+                                 key="simu_budget", disabled=not eng)
+        st.markdown("**3 · Combien coûte un départ ?**")
+        mois = st.slider("Coût d'un départ (mois de salaire du partant)", 3, 12, 6, 1, key="simu_mois",
+                         help="Recrutement, intégration, perte de productivité. Hypothèse courante : 6 à 9 mois.")
+    res = simuler(cible, dep, niveau if sal else 0, gain if eng else 0.0)
+    n = len(res)
+    cout_sal = res["hausse"].sum() * 12
+    cout_eng = budget * n if eng else 0
+    cout = cout_sal + cout_eng
+    av, ap = res["probabilite"].sum() * 2, res["apres"].sum() * 2          # deux semestres : horizon d'un an
+    evites = av - ap
+    cout_dep = (res["probabilite"] * res["salaire_mensuel"].fillna(res["salaire_mensuel"].median())).sum() * 2 * mois
+    gain_dep = ((res["probabilite"] - res["apres"]) * res["salaire_mensuel"].fillna(res["salaire_mensuel"].median())).sum() * 2 * mois
+    net = gain_dep - cout
+    with dr:
+        k = st.columns(4)
+        tuile(k[0], "Collaborateurs concernés", nb(n), "👥")
+        tuile(k[1], "Coût de l'action (FCFA / an)", fcfa(cout), "💰")
+        tuile(k[2], f"Départs attendus sur un an · {nb(evites, 1)} évités", f"{nb(av, 0)} → {nb(ap, 0)}", "🚪")
+        couleur = "#0A7A3E" if net >= 0 else "#CD3C14"
+        tuile(k[3], "Gain net (FCFA / an)", f"<span style='color:{couleur}'>{'+' if net >= 0 else '−'}{fcfa(abs(net))}</span>", "📈")
+        st.write("")
+        c1, c2 = st.columns(2)
+        with carte(c1):
+            fig = go.Figure(go.Waterfall(
+                x=["Coût des départs<br>sans action", "Départs évités", "Coût de l'action", "Coût total<br>avec action"],
+                measure=["absolute", "relative", "relative", "total"], y=[cout_dep, -gain_dep, cout, 0],
+                text=[fcfa(cout_dep), "−" + fcfa(gain_dep), "+" + fcfa(cout), fcfa(cout_dep - gain_dep + cout)],
+                textposition="outside", connector=dict(line=dict(color="#BDBDBD")),
+                increasing=dict(marker_color="#CD3C14"), decreasing=dict(marker_color="#0A7A3E"),
+                totals=dict(marker_color=JAUNE)))
+            fig.update_layout(title="Sans action / avec action, sur un an (FCFA)", yaxis_visible=False,
+                              waterfallgap=.35)
+            fig.update_yaxes(range=[0, max(cout_dep, cout_dep - gain_dep + cout) * 1.25])
+            graphique(st, fig, 320, False, cliquable=False)
+        with carte(c2):
+            xs = np.arange(3, 13)
+            ys = [gain_dep / mois * m - cout for m in xs]
+            fig = go.Figure(go.Bar(x=xs, y=ys, marker_color=[("#0A7A3E" if y >= 0 else "#CD3C14") if m != mois else JAUNE
+                                                              for m, y in zip(xs, ys)],
+                                   text=[("+" if y >= 0 else "−") + fcfa(abs(y)) for y in ys], textposition="outside"))
+            seuil = cout / (gain_dep / mois) if gain_dep > 0 else None
+            titre = (f"Gain net selon le coût d'un départ · seuil {nb(seuil, 1)} mois" if seuil and seuil <= 24
+                     else "Gain net selon le coût d'un départ")
+            fig.update_layout(title=titre, xaxis_title="Coût d'un départ (mois de salaire)", yaxis_visible=False,
+                              xaxis=dict(tickmode="linear", dtick=1))
+            fig.add_hline(y=0, line_color="#000", line_width=1)
+            graphique(st, fig, 320, False, cliquable=False)
+        lecture = (f"Pour <b>{fcfa(cout)} FCFA</b> par an, l'action éviterait environ <b>{nb(evites, 0)} départs</b> "
+                   f"sur {nb(av, 0)} attendus chez les {nb(n)} collaborateurs ciblés. Avec un départ à {mois} mois de "
+                   f"salaire, elle {'rapporte' if net >= 0 else 'coûte'} <b>{fcfa(abs(net))} FCFA</b> de "
+                   f"{'plus' if net < 0 else 'gain net'}")
+        lecture += (f" ; elle devient rentable si un départ coûte plus de {nb(seuil, 1)} mois de salaire." if seuil and net < 0
+                    else ".")
+        st.markdown(f"<div class='pc-lecture'>{lecture}</div>", unsafe_allow_html=True)
+    if auth.peut_voir_nominatif() and n:
+        st.write("")
+        titre_tableau("Collaborateurs concernés, par baisse de risque",
+                      "réservé au profil DRH · probabilité de départ à 6 mois avant et après l'action")
+        t = res.assign(baisse=res["probabilite"] - res["apres"]).sort_values("baisse", ascending=False)
+        t = pd.DataFrame({"Identifiant": t["id"], "Département": t["departement"], "Grade": t["grade"],
+                          "Poste": t["poste"], "Niveau": t["niveau_risque"],
+                          "Risque avant": t["probabilite"], "Risque après": t["apres"],
+                          "Hausse mensuelle (FCFA)": t["hausse"].round(0)})
+        st.dataframe(zebre(t), hide_index=True, width="stretch", height=320, column_config={
+            "Risque avant": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1, color="#CD3C14"),
+            "Risque après": st.column_config.ProgressColumn(format="percent", min_value=0, max_value=1, color="#FF7900"),
+            "Hausse mensuelle (FCFA)": st.column_config.NumberColumn(format="%.0f")})
+
+
 # ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
@@ -2745,6 +2882,7 @@ REGISTRE = [
     ("Pilotage", "Vue d'ensemble RH", p_vue_ensemble, "vue-ensemble", "dashboard", False),
     ("Pilotage", "Assistant RH", p_assistant, "assistant", "forum", False),
     ("Pilotage", "Recommandations", p_recommandations, "recommandations", "checklist", False),
+    ("Pilotage", "Simulateur d'actions", p_simulateur, "simulateur", "calculate", False),
     ("Effectifs", "Analyse démographique", p_demographie, "demographie", "groups", False),
     ("Effectifs", "Diversité", p_diversite, "diversite", "diversity_3", False),
     ("Effectifs", "Historique et tendances", p_tendances, "tendances", "timeline", False),
@@ -2783,8 +2921,8 @@ PAGE = {r["url"]: st.Page(r["fn"], title=r["titre"], icon=f":material/{r['icone'
         for r in REGISTRE_VISIBLE}
 ACCUEIL = st.Page(p_accueil, title="Accueil", icon=":material/home:", url_path="accueil", default=True)
 ORDRE = [ACCUEIL] + [PAGE[r["url"]] for r in REGISTRE_VISIBLE]
-SECTIONS = {"": [ACCUEIL, PAGE["vue-ensemble"], PAGE["assistant"], PAGE["recommandations"]]}
-for r in REGISTRE_VISIBLE[3:]:
+SECTIONS = {"": [ACCUEIL, PAGE["vue-ensemble"], PAGE["assistant"], PAGE["recommandations"], PAGE["simulateur"]]}
+for r in REGISTRE_VISIBLE[4:]:
     SECTIONS.setdefault(r["section"], []).append(PAGE[r["url"]])
 COURANTE = st.navigation(SECTIONS, position="top")
 COURANTE.run()
