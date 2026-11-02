@@ -127,6 +127,42 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
+# Fond des pages (proposition : ?fond=gris | creme | lueur | points | anneau)
+_FOND_APP = '[data-testid="stApp"], [data-testid="stAppViewContainer"], header[data-testid="stHeader"]'
+FONDS = {
+    "blanc": "",
+    "gris": f"""{_FOND_APP} {{background: #F3F3F3 !important;}}
+      .st-key-entete {{background: #FFFFFF !important; border: 1px solid #E6E6E6;}}
+      .population {{background: #FFFFFF !important;}}""",
+    "creme": f"""{_FOND_APP} {{background: #FAF7F2 !important;}}
+      .st-key-entete {{background: #FFFFFF !important; border: 1px solid #EFE7DC;}}
+      .population {{background: #FFFFFF !important; border-color: #EFE7DC !important;}}""",
+    "lueur": f"""{_FOND_APP} {{background:
+        radial-gradient(900px 520px at 100% 0%, rgba(255,121,0,.10), transparent 60%),
+        radial-gradient(700px 500px at 0% 100%, rgba(0,0,0,.05), transparent 60%), #F6F6F6 !important;
+        background-attachment: fixed !important;}}
+      header[data-testid="stHeader"] {{background: transparent !important;}}
+      .st-key-entete {{background: rgba(255,255,255,.85) !important; border: 1px solid #ECECEC;
+        backdrop-filter: blur(6px);}}
+      .population {{background: rgba(255,255,255,.9) !important;}}""",
+    "points": f"""{_FOND_APP} {{background-color: #F7F7F7 !important;
+        background-image: radial-gradient(#DADADA 1px, transparent 1px) !important; background-size: 22px 22px !important;
+        background-attachment: fixed !important;}}
+      header[data-testid="stHeader"] {{background: rgba(247,247,247,.92) !important;}}
+      .st-key-entete {{background: #FFFFFF !important; border: 1px solid #E6E6E6;}}
+      .population {{background: #FFFFFF !important;}}""",
+    "anneau": f"""{_FOND_APP} {{background-color: #F5F5F5 !important;
+        background-image: radial-gradient(circle at calc(100% + 120px) calc(100% + 120px), transparent 330px,
+          rgba(255,121,0,.10) 331px, rgba(255,121,0,.10) 400px, transparent 401px) !important;
+        background-attachment: fixed !important;}}
+      header[data-testid="stHeader"] {{background: rgba(245,245,245,.92) !important;}}
+      .st-key-entete {{background: #FFFFFF !important; border: 1px solid #E6E6E6;}}
+      .population {{background: #FFFFFF !important;}}""",
+}
+if st.query_params.get("fond") in FONDS:
+    st.session_state["fond"] = st.query_params["fond"]
+st.markdown(f"<style>{FONDS.get(st.session_state.get('fond', 'blanc'), '')}</style>", unsafe_allow_html=True)
+
 # Mise en avant au survol : l'élément pointé monte légèrement, prend un contour orange et un fond orange pâle
 CARTE = 'div[class*="st-key-carte-"]'
 st.markdown(f"""<style>
