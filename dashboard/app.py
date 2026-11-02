@@ -79,6 +79,26 @@ st.markdown(f"""
   .fl-lib {{color: #595959;}} .fl-sep {{color: #8C8C8C;}} .fl-val {{font-weight: 700; color: #1A1A1A;}}
   .pastille-note {{width: fit-content; margin: 8px auto 4px auto; padding: 6px 18px; border-radius: 999px;
           background: #FFF1E5; border: 1px solid #FFD0A6; color: #333;}}
+  .st-key-parcours {{background:#000; border-radius:14px; padding:16px 20px 12px 20px; margin:6px 0 10px 0;}}
+  .pc-haut {{display:flex; justify-content:space-between; align-items:center;}}
+  .pc-nom {{color:#FF7900; font-weight:800; font-size:.8rem; letter-spacing:.06em; text-transform:uppercase;}}
+  .pc-pas {{color:#BDBDBD; font-size:.8rem;}}
+  .pc-puces {{display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 8px 0;}}
+  .pc-puce {{border:1px solid #444; color:#9E9E9E; border-radius:999px; padding:2px 10px; font-size:.76rem;}}
+  .pc-puce.fait {{border-color:#FF7900; color:#FF7900;}}
+  .pc-puce.on {{background:#FF7900; border-color:#FF7900; color:#000; font-weight:700;}}
+  .pc-titre {{color:#fff; font-weight:800; font-size:1.1rem;}}
+  .pc-texte {{color:#E0E0E0; font-size:.95rem; line-height:1.5; margin-top:2px;}}
+  .pc-texte b {{color:#fff;}}
+  .st-key-parcours-boutons button[kind="tertiary"] p {{color:#BDBDBD;}}
+  .st-key-parcours-boutons button[kind="secondary"] {{background:transparent; border-color:#555;}}
+  .st-key-parcours-boutons button[kind="secondary"] p {{color:#fff;}}
+  div[class*="st-key-pont-"] {{background:#FFF4EB; border:1px solid #FFD9B8; border-radius:12px; padding:10px 14px;
+       margin-top:14px;}}
+  .pont {{display:flex; gap:12px; align-items:center; color:#333; font-size:.92rem; line-height:1.45;}}
+  .pont .t-svg, .pont svg {{width:26px; height:26px; flex-shrink:0; color:#F16E00;}}
+  div[class*="st-key-vers-"] a {{padding:0;}}
+  div[class*="st-key-vers-"] a p {{color:#F16E00 !important; font-weight:700; font-size:.85rem;}}
   .reco-prio {{text-align: center; font-weight: 800; border-radius: 999px; padding: 6px 4px; font-size: .85rem;}}
   .reco-constat {{font-weight: 800; color: #000; font-size: 1.02rem;}}
   .reco-action {{color: #333; margin: 4px 0 2px 0;}}
@@ -287,7 +307,7 @@ ICONES = {"👥": "groups", "🚪": "logout", "🧲": "person_add", "👩": "wom
           "⚥": "wc", "⏳": "hourglass_empty", "💰": "payments", "👩\u200d💼": "badge", "🎂": "cake",
           "🧑\u200d🤝\u200d🧑": "diversity_3", "📅": "event", "🤒": "sick", "⏱️": "schedule", "📊": "bar_chart",
           "🏃": "directions_run", "👔": "work", "📉": "trending_down", "📈": "trending_up", "🏢": "domain",
-          "🎯": "target", "📝": "edit_note", "📄": "description", "🗂️": "folder", "🛠️": "build", "🔤": "abc"}
+          "🎯": "target", "📝": "edit_note", "📄": "description", "🗂️": "folder", "🛠️": "build", "🔤": "abc", "🔗": "account_tree"}
 
 
 ICONES_PLEINES = {"hourglass_empty": "hourglass_bottom", "target": "gps_fixed"}
@@ -608,6 +628,7 @@ def en_tete(numero, titre, periodes=PERIODES, cle="", avec_departement=True, def
     else:
         f = None
     ecrire_adresse(partage, r["url"], periode, periodes, dep, f)
+    bandeau_parcours(r["url"])
     if periode:
         population(d, periode)
     else:
@@ -704,6 +725,177 @@ def cohorte(periode):
 
 
 
+
+
+
+# ---------------------------------------------------------------------------
+# Parcours guidés et ponts entre thèmes : les chiffres clés de l'histoire, à l'échelle de l'entreprise
+# ---------------------------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def faits():
+    """Chiffres clés (dernière date, dernière cohorte connue) utilisés par les parcours et les ponts."""
+    per, coh = PERIODES[-1], PERIODES_HIST[-1]
+    cur = DF[DF["periode"] == per]
+    h = DF[DF["jeu"] == "historique"]
+    hc = h[h["periode"] == coh]
+    taux_coh = h.groupby("periode")["target"].mean()
+    f = dict(per=per, date=DATES_LIB[per], coh=coh, departs=int(hc["target"].sum()), taux=hc["target"].mean(),
+             taux_prec=taux_coh.iloc[-2] if len(taux_coh) > 1 else None)
+    td = hc[hc["departement"] != "Non renseigné"].groupby("departement")["target"].agg(["mean", "size"])
+    td = td[td["size"] >= 20]
+    f["dep_max"], f["dep_max_taux"] = td["mean"].idxmax(), td["mean"].max()
+    ta = hc.groupby("tranche_anciennete")["target"].mean().reindex(ORDRE_ANC).dropna()
+    f["anc_max"], f["anc_max_taux"] = ta.idxmax(), ta.max()
+    sous = hc["ratio_salaire_reference"] < .9
+    f["dep_sous90"], f["dep_sur90"] = hc.loc[sous, "target"].mean(), hc.loc[~sous, "target"].mean()
+    eng = hc["engagement_actuel"] < 3
+    f["dep_eng_bas"], f["dep_eng_ok"] = hc.loc[eng, "target"].mean(), hc.loc[hc["engagement_actuel"] >= 3, "target"].mean()
+    act, contrib = modele_risque()
+    fam = contrib.drop(columns="donnees")
+    sig = act.index[act["signale"]]
+    top3 = fam.loc[sig].apply(lambda l: l.nlargest(3)[l.nlargest(3) > 0.04].index.tolist(), axis=1)
+    freq = pd.Series([x for liste in top3 for x in liste]).value_counts() / max(len(sig), 1)
+    f["n_signales"], f["part_eng"], f["part_sal"] = len(sig), freq.get("engagement", 0), freq.get("remuneration", 0)
+    par = DF.groupby("periode")
+    masse = par["salaire_mensuel"].sum()
+    f["masse"], f["masse_hausse"], f["debut"] = masse.iloc[-1], masse.iloc[-1] / masse.iloc[0] - 1, PERIODES[0]
+    eff = par.size()
+    f["eff_hausse"] = eff.iloc[-1] / eff.iloc[0] - 1
+    f["sous90"], f["n_sous90"] = (cur["ratio_salaire_reference"] < .9).mean(), int((cur["ratio_salaire_reference"] < .9).sum())
+    fh = cur[cur["genre"].isin(["F", "M"])]
+    med = fh.groupby(["grade", "genre"])["salaire_mensuel"].median().unstack()
+    n = fh.groupby(["grade", "genre"]).size().unstack()
+    ec = (med["F"] / med["M"] - 1).where((n["F"] >= 10) & (n["M"] >= 10)).dropna()
+    f["ecart_grade"], f["ecart"] = (ec.abs().idxmax(), ec[ec.abs().idxmax()]) if len(ec) else (None, 0)
+    ab = par["taux_absenteisme"].mean()
+    f["abs"], f["abs_debut"], f["abs_max_per"], f["abs_max"] = ab.iloc[-1], ab.iloc[0], ab.idxmax(), ab.max()
+    abd = cur[cur["departement"] != "Non renseigné"].groupby("departement")["taux_absenteisme"].mean()
+    f["abs_dep"], f["abs_dep_taux"] = abd.idxmax(), abd.max()
+    q = hc["taux_absenteisme"] >= hc["taux_absenteisme"].quantile(.75)
+    f["dep_abs_haut"], f["dep_abs_bas"] = hc.loc[q, "target"].mean(), hc.loc[~q, "target"].mean()
+    return f
+
+
+def _pts(a, b, dec=1):
+    return f"{'+' if a - b >= 0 else '−'}{pct(abs(a - b), dec).replace(' %', ' pt')}"
+
+
+PARCOURS = {
+    "departs": dict(
+        titre="Pourquoi perd-on des collaborateurs ?", icone="logout",
+        resume="Du constat des départs jusqu'aux personnes à accompagner.",
+        etapes=[
+            ("analyse-departs", "Le constat", lambda f: (
+                f"Sur la cohorte {f['coh']}, <b>{f['departs']} collaborateurs</b> sont partis dans les 6 mois, soit "
+                f"<b>{pct(f['taux'])}</b>" + (f" ({_pts(f['taux'], f['taux_prec'])} par rapport à la cohorte précédente)"
+                                             if f['taux_prec'] is not None else "") +
+                f". <b>{f['dep_max']}</b> est le département le plus touché ({pct(f['dep_max_taux'])}).")),
+            ("caracteristiques-departs", "Qui part ?", lambda f: (
+                f"Les départs sont les plus fréquents chez les collaborateurs de <b>{f['anc_max']}</b> d'ancienneté "
+                f"({pct(f['anc_max_taux'])}). Deux signaux ressortent : ceux payés sous 90 % de la référence de leur "
+                f"grade partent à <b>{pct(f['dep_sous90'])}</b> (contre {pct(f['dep_sur90'])}), ceux dont l'engagement "
+                f"est inférieur à 3 à <b>{pct(f['dep_eng_bas'])}</b> (contre {pct(f['dep_eng_ok'])}).")),
+            ("anticipation", "Qui risque de partir ?", lambda f: (
+                f"Le modèle confirme ces deux signaux : l'engagement figure parmi les principaux facteurs de "
+                f"<b>{pct(f['part_eng'], 0)}</b> des {f['n_signales']} collaborateurs signalés, le positionnement "
+                f"salarial de <b>{pct(f['part_sal'], 0)}</b>. Cliquez sur une ligne de la liste pour ouvrir une fiche.")),
+            ("recommandations", "Que faire ?", lambda f: (
+                "Le plan d'action traduit ces constats : entretiens de rétention dans les départements les plus "
+                "touchés, revue salariale ciblée, entretiens de carrière pour les profils performants peu engagés.")),
+        ]),
+    "salaires": dict(
+        titre="Notre politique salariale est-elle juste ?", icone="payments",
+        resume="Du coût de la masse salariale à son effet sur les départs.",
+        etapes=[
+            ("salaires", "Combien et comment ?", lambda f: (
+                f"La masse salariale mensuelle atteint <b>{fcfa(f['masse'])} FCFA</b> au {f['date']}, "
+                f"<b>{pct(f['masse_hausse'], 0)}</b> depuis {f['debut']}, portée surtout par la hausse de l'effectif "
+                f"({pct(f['eff_hausse'], 0)}). Mais <b>{pct(f['sous90'], 0)}</b> des collaborateurs ({nb(f['n_sous90'])}) "
+                "sont payés sous 90 % de la référence de leur grade.")),
+            ("equite-salariale", "Est-ce équitable ?", lambda f: (
+                f"À grade comparable, le plus grand écart de salaire médian femmes / hommes est en "
+                f"<b>{f['ecart_grade']}</b> : <b>{pct(f['ecart'], 1)}</b> pour les femmes. "
+                "Comparez par département dans cette page." if f['ecart_grade'] else
+                "Aucun grade ne présente d'écart notable avec au moins 10 femmes et 10 hommes.")),
+            ("anticipation", "Effet sur les départs", lambda f: (
+                f"Le salaire sous la référence pèse lourd : ces collaborateurs sont partis à <b>{pct(f['dep_sous90'])}</b> "
+                f"contre {pct(f['dep_sur90'])} pour les autres, et le positionnement salarial figure parmi les principaux "
+                f"facteurs de <b>{pct(f['part_sal'], 0)}</b> des collaborateurs signalés.")),
+            ("recommandations", "Que faire ?", lambda f: (
+                "Prioriser la revue salariale sur les collaborateurs sous 90 % de la référence, en commençant par ceux "
+                "que le modèle signale.")),
+        ]),
+    "absences": dict(
+        titre="L'absentéisme dérape-t-il ?", icone="event_busy",
+        resume="De la tendance aux départements concernés, et au lien avec les départs.",
+        etapes=[
+            ("absenteisme", "La tendance", lambda f: (
+                f"Le taux d'absentéisme est de <b>{pct(f['abs'], 2)}</b> au {f['date']} "
+                f"({_pts(f['abs'], f['abs_debut'], 2)} depuis {f['debut']}). Le pic a été atteint en "
+                f"{f['abs_max_per']} ({pct(f['abs_max'], 2)}) : la hausse n'est pas continue, à surveiller semestre "
+                "par semestre.")),
+            ("absences-departement", "Où ?", lambda f: (
+                f"<b>{f['abs_dep']}</b> a le taux le plus élevé ({pct(f['abs_dep_taux'], 2)}). Choisissez-le dans la "
+                "liste pour voir la part d'absences justifiées et non justifiées.")),
+            ("caracteristiques-departs", "Effet sur les départs", lambda f: (
+                f"Les collaborateurs les plus absents (quart supérieur) sont partis à <b>{pct(f['dep_abs_haut'])}</b> "
+                f"contre {pct(f['dep_abs_bas'])} pour les autres : l'absentéisme est aussi un signal d'alerte.")),
+            ("recommandations", "Que faire ?", lambda f: (
+                "Analyser les causes avec les managers des départements concernés (absences non justifiées, charge, "
+                "organisation) et suivre le taux chaque semestre.")),
+        ]),
+}
+
+
+def demarrer_parcours(cle):
+    st.session_state["parcours"] = {"cle": cle, "etape": 0}
+    st.switch_page(PAGE[PARCOURS[cle]["etapes"][0][0]])
+
+
+def bandeau_parcours(url):
+    """Si un parcours est en cours et que la page affichée en est l'étape courante : lecture et navigation."""
+    etat = st.session_state.get("parcours")
+    if not etat:
+        return
+    p = PARCOURS[etat["cle"]]
+    etapes = p["etapes"]
+    i = etat["etape"]
+    if etapes[i][0] != url:
+        autres = [k for k, e in enumerate(etapes) if e[0] == url]
+        if not autres:
+            return
+        i = etat["etape"] = autres[0]
+    _, titre, texte = etapes[i]
+    puces = "".join(f"<span class='pc-puce{' on' if k == i else ' fait' if k < i else ''}'>{k + 1} · {e[1]}</span>"
+                    for k, e in enumerate(etapes))
+    with st.container(key="parcours"):
+        st.markdown(f"<div class='pc-haut'><span class='pc-nom'>Parcours · {p['titre']}</span>"
+                    f"<span class='pc-pas'>Étape {i + 1} / {len(etapes)}</span></div>"
+                    f"<div class='pc-puces'>{puces}</div>"
+                    f"<div class='pc-titre'>{titre}</div><div class='pc-texte'>{texte(faits())}</div>",
+                    unsafe_allow_html=True)
+        with st.container(horizontal=True, gap="small", key="parcours-boutons"):
+            if i > 0 and st.button("Étape précédente", icon=":material/arrow_back:", key="pc-prec"):
+                etat["etape"] = i - 1
+                st.switch_page(PAGE[etapes[i - 1][0]])
+            if i < len(etapes) - 1:
+                if st.button(f"Étape suivante : {etapes[i + 1][1]}", icon=":material/arrow_forward:", type="primary",
+                             key="pc-suiv"):
+                    etat["etape"] = i + 1
+                    st.switch_page(PAGE[etapes[i + 1][0]])
+            if st.button("Terminer le parcours" if i == len(etapes) - 1 else "Quitter", icon=":material/close:",
+                         key="pc-quitter", type="tertiary"):
+                st.session_state.pop("parcours", None)
+                st.switch_page(ORDRE[0])
+
+
+def pont(texte, url):
+    """Encart « À relier » : rattache le constat de la page à un autre thème, avec un lien."""
+    with st.container(key=f"pont-{url}"):
+        a, b = st.columns([5, 1.4], vertical_alignment="center")
+        a.markdown(f"<div class='pont'>{ico('🔗')}<div><b>À relier</b> · {texte}</div></div>",
+                   unsafe_allow_html=True)
+        b.page_link(PAGE[url], label=PAGE[url].title, icon=":material/arrow_forward:")
 
 
 # ---------------------------------------------------------------------------
@@ -806,6 +998,15 @@ def p_accueil():
   .acc-marque {{font-size: 1.9rem; font-weight: 800; letter-spacing: -.02em; color: #000;}}
   .acc-marque b {{color: {ORANGE};}}
   .acc-sous {{color: #8C8C8C; font-size: .9rem; margin-top: 2px;}}
+  .acc-pc-titre {{text-align:center; font-size:1.5rem; font-weight:800; color:#000; letter-spacing:-.01em; margin-top:8px;}}
+  div[class*="st-key-acc-pc-"] {{background:#fff; border-radius:14px; border-color:#E6E6E6 !important;
+       transition: box-shadow .15s, border-color .15s, transform .15s;}}
+  div[class*="st-key-acc-pc-"]:hover {{border-color:{ORANGE} !important; box-shadow:0 8px 22px rgba(0,0,0,.08);
+       transform: translateY(-2px);}}
+  .acc-pc-ico {{width:40px; height:40px; border-radius:10px; background:#000; color:{ORANGE}; padding:8px;}}
+  .acc-pc-q {{font-weight:800; font-size:1.12rem; color:#000; margin-top:10px; line-height:1.25;}}
+  .acc-pc-r {{color:#595959; font-size:.88rem; margin-top:4px;}}
+  .acc-pc-e {{color:#8C8C8C; font-size:.78rem; margin:10px 0 4px 0;}}
   .acc-user {{text-align: right; color: #595959; font-size: .8rem; line-height: 1.35;}}
   .acc-user b {{color: #000;}}
   .st-key-deco_accueil button {{border-radius: 999px; border-color: #DDD;}}
@@ -846,6 +1047,20 @@ def p_accueil():
             with st.container(key=f"cercle-{i}"):
                 st.page_link(pg, label=pg.title)
 
+    st.markdown("<div class='acc-pc-titre'>Parcours guidés</div><div class='acc-sous' style='text-align:center'>"
+                "Trois questions de la DRH, chacune déroulée en quelques pages avec la lecture des chiffres.</div>",
+                unsafe_allow_html=True)
+    st.write("")
+    cols = st.columns(len(PARCOURS))
+    for col, (cle, p) in zip(cols, PARCOURS.items()):
+        with col.container(border=True, key=f"acc-pc-{cle}"):
+            etapes = " → ".join(e[1] for e in p["etapes"])
+            st.markdown(f"<div class='acc-pc-ico'>{svg_icone(p['icone'])}</div><div class='acc-pc-q'>{p['titre']}</div>"
+                        f"<div class='acc-pc-r'>{p['resume']}</div><div class='acc-pc-e'>{etapes}</div>",
+                        unsafe_allow_html=True)
+            if st.button("Démarrer", key=f"go-{cle}", icon=":material/play_arrow:", type="primary", width="stretch"):
+                demarrer_parcours(cle)
+    st.write("")
     act = DF[DF["jeu"] == "actuel"]
     st.markdown(f"<div class='note' style='text-align:center'>Cliquez sur un thème pour ouvrir son tableau de bord.<br>"
                 f"Données TelcomCI : {len(act)} collaborateurs au 31/12/2024, historique semestriel depuis juin 2022, "
@@ -864,13 +1079,15 @@ def p_vue_ensemble():
     par = d.groupby("periode")
     eff = par.size()
 
-    def ligne(theme, icone):
+    def ligne(theme, icone, url):
         c = st.columns([1.0, 1.6, 1.6, 2, 1.4])
         c[0].markdown(f"<div class='bandeau' style='margin-top:30px'>{ico(icone)}{theme}</div>", unsafe_allow_html=True)
+        with c[0].container(key=f"vers-{url}"):
+            st.page_link(PAGE[url], label="Analyser", icon=":material/arrow_forward:", help=PAGE[url].title)
         return c
 
     # Collaborateurs
-    c = ligne("Collaborateurs", "👥")
+    c = ligne("Collaborateurs", "👥", "demographie")
     tuile(c[1], "Effectif", nb(len(cur)), delta=evolution(eff, per))
     c[1].plotly_chart(sparkline(eff), width="stretch", config={"staticPlot": True})
     graphique(c[2], anneau(cur["contrat"].value_counts().reset_index(), "contrat", "count", "Effectif par contrat",
@@ -882,7 +1099,7 @@ def p_vue_ensemble():
     tuile(c[4], "Ancienneté moyenne (ans)", nb(cur["anciennete"].mean(), 2))
 
     # Diversité
-    c = ligne("Diversité", "🧑‍🤝‍🧑")
+    c = ligne("Diversité", "🧑‍🤝‍🧑", "diversite")
     fem_cadres = par.apply(lambda x: (x.loc[x["cadre"] == 1, "genre"] == "F").mean())
     tuile(c[1], "% de femmes parmi les cadres (G4-G5)", pct(fem_cadres.get(per)),
           delta=evolution(fem_cadres, per))
@@ -895,7 +1112,7 @@ def p_vue_ensemble():
     tuile(c[4], "Âge moyen", nb(cur["age"].mean(), 1))
 
     # Recrutements
-    c = ligne("Recrutements", "🧲")
+    c = ligne("Recrutements", "🧲", "arrivees")
     arr = par["arrivee"].sum()
     tuile(c[1], "Arrivées (6 derniers mois)", nb(arr.get(per)), delta=evolution(arr, per))
     c[1].plotly_chart(sparkline(arr), width="stretch", config={"staticPlot": True})
@@ -909,7 +1126,7 @@ def p_vue_ensemble():
                            COULEURS_GENRE), 200, False)
 
     # Départs
-    c = ligne("Départs", "🚪")
+    c = ligne("Départs", "🚪", "analyse-departs")
     coh = cohorte(per)
     h = d[d["jeu"] == "historique"]
     dep = h.groupby("periode")["target"].sum()
@@ -1415,6 +1632,10 @@ def p_salaires():
         st.dataframe(zebre(t), hide_index=True, width="stretch", height=250,
                      column_config={"Salaire moyen (FCFA)": st.column_config.ProgressColumn(
                          format="%.0f", min_value=0, max_value=float(t["Salaire moyen (FCFA)"].max()), color="#FF7900")})
+    f = faits()
+    pont(f"les collaborateurs payés sous 90 % de la référence de leur grade sont partis à <b>{pct(f['dep_sous90'])}</b> "
+         f"contre {pct(f['dep_sur90'])} pour les autres (cohorte {f['coh']}). Le positionnement salarial figure parmi "
+         f"les principaux facteurs de départ de <b>{pct(f['part_sal'], 0)}</b> des collaborateurs signalés.", "anticipation")
 
 
 # ---------------------------------------------------------------------------
@@ -1535,6 +1756,10 @@ def p_performance():
         st.dataframe(m.style.map(teinte, subset=(m.index[:-1], m.columns[:-1])), width="stretch", height=230)
     st.markdown("<div class='note'>Niveaux de performance (note sur 5) : Insuffisante ≤ 2,5 · Attendue ≤ 3,5 · "
                 "Bonne ≤ 4,2 · Excellente au-delà.</div>", unsafe_allow_html=True)
+    f = faits()
+    pont(f"les collaborateurs dont l'engagement est inférieur à 3 sont partis à <b>{pct(f['dep_eng_bas'])}</b> contre "
+         f"{pct(f['dep_eng_ok'])} pour les autres (cohorte {f['coh']}). C'est le premier facteur du modèle de départ, "
+         f"présent chez <b>{pct(f['part_eng'], 0)}</b> des collaborateurs signalés.", "anticipation")
 
 
 # ---------------------------------------------------------------------------
@@ -1786,6 +2011,10 @@ def p_analyse_departs():
         graphique(st, px.bar(tc, x="periode", y="taux", color="contrat", text=tc["taux"].map(pct),
                              title="Tendance du taux de départ, par contrat", color_discrete_map={"CDI": JAUNE, "CDD": GRIS})
                   .update_layout(xaxis_title=None, yaxis_visible=False), 280)
+    f = faits()
+    pont(f"deux signaux expliquent une grande partie des départs : salaire sous 90 % de la référence du grade "
+         f"(<b>{pct(f['dep_sous90'])}</b> de départs contre {pct(f['dep_sur90'])}) et engagement inférieur à 3 "
+         f"(<b>{pct(f['dep_eng_bas'])}</b> contre {pct(f['dep_eng_ok'])}).", "anticipation")
 
 
 # ---------------------------------------------------------------------------
