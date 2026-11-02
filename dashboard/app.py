@@ -142,6 +142,30 @@ FOND_ANNEAU = f"""{_FOND_APP} {{background-color: {CREME} !important;
 if auth.utilisateur():
     st.markdown(f"<style>{FOND_PAGES}</style>", unsafe_allow_html=True)
 
+# Choix du département en colonne de boutons (pages Profil département et Absences par département)
+_CHOIX = 'div[class*="st-key-choix-dep_"]'
+_OPTION = f'{_CHOIX} label[data-testid="stRadioOption"]'
+st.markdown(f"""<style>
+  {_CHOIX} {{background: #FFFFFF; border: 1px solid #E6D9C4; border-radius: 14px;
+      padding: 12px 10px 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,.04);}}
+  .choix-titre {{text-align: center; font-weight: 800; font-size: .95rem; color: #000; padding-bottom: 8px;
+      margin-bottom: 8px; border-bottom: 2px solid {ORANGE};}}
+  {_CHOIX} [data-testid="stElementContainer"], {_CHOIX} [data-testid="stRadio"],
+  {_CHOIX} [data-testid="stRadio"] > div {{width: 100% !important; max-width: 100% !important;}}
+  {_CHOIX} div[role="radiogroup"] {{display: flex; flex-direction: column; gap: 7px; width: 100%;}}
+  {_CHOIX} div[role="radiogroup"] > div {{width: 100%;}}
+  {_OPTION} {{width: 100%; margin: 0; padding: 7px 10px; justify-content: center; background: #FFFFFF;
+      border: 1px solid #E3E3E3; border-radius: 10px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      transition: background .15s, border-color .15s, transform .15s;}}
+  {_OPTION} > div {{width: 100%; justify-content: center;}}
+  {_OPTION} > div > div:first-child {{display: none;}}
+  {_OPTION} p {{font-weight: 600; color: #333; text-align: center; margin: 0;}}
+  {_OPTION}:hover {{border-color: {ORANGE}; background: #FFF4EB; transform: translateX(2px);}}
+  {_OPTION}[data-selected="true"] {{background: {ORANGE}; border-color: {ORANGE};
+      box-shadow: 0 4px 12px rgba(255,121,0,.30);}}
+  {_OPTION}[data-selected="true"] p {{color: #000; font-weight: 800;}}
+</style>""", unsafe_allow_html=True)
+
 # Mise en avant au survol : l'élément pointé monte légèrement, prend un contour orange et un fond orange pâle
 CARTE = 'div[class*="st-key-carte-"]'
 st.markdown(f"""<style>
@@ -1535,8 +1559,9 @@ def p_absences_dep():
 def _absences_dep_corps(per):
     gauche, droite = st.columns([0.8, 4])
     with gauche:
-        st.markdown("<div class='bandeau'>Département</div>", unsafe_allow_html=True)
-        dep = st.radio("Département", DEPARTEMENTS, key="dep_leave", label_visibility="collapsed")
+        with st.container(key="choix-dep_leave"):
+            st.markdown("<div class='choix-titre'>Département</div>", unsafe_allow_html=True)
+            dep = st.radio("Département", DEPARTEMENTS, key="dep_leave", label_visibility="collapsed")
     cur = DF[(DF["periode"] == per) & (DF["departement"] == dep)]
     with droite:
         c = st.columns(3)
@@ -1845,8 +1870,9 @@ def p_profil_departement():
 def _profil_departement_corps(per):
     gauche, droite = st.columns([0.8, 4])
     with gauche:
-        st.markdown("<div class='bandeau'>Département</div>", unsafe_allow_html=True)
-        dep = st.radio("Département", DEPARTEMENTS, key="dep_profil", label_visibility="collapsed")
+        with st.container(key="choix-dep_profil"):
+            st.markdown("<div class='choix-titre'>Département</div>", unsafe_allow_html=True)
+            dep = st.radio("Département", DEPARTEMENTS, key="dep_profil", label_visibility="collapsed")
     d = DF[DF["departement"] == dep]
     cur = d[d["periode"] == per]
     entreprise = DF[DF["periode"] == per]
