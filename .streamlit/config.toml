@@ -2,6 +2,9 @@
 primaryColor = "#FF7900"
 base = "light"
 font = "sans serif"
+dataframeHeaderBackgroundColor = "#FF7900"
+dataframeHeaderTextColor = "#000000"
+dataframeBorderColor = "#E6D9C4"
 
 [client]
 toolbarMode = "minimal"

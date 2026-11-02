@@ -79,6 +79,15 @@ st.markdown(f"""
   .fl-lib {{color: #595959;}} .fl-sep {{color: #8C8C8C;}} .fl-val {{font-weight: 700; color: #1A1A1A;}}
   .pastille-note {{width: fit-content; margin: 8px auto 4px auto; padding: 6px 18px; border-radius: 999px;
           background: #FFF1E5; border: 1px solid #FFD0A6; color: #333;}}
+  .tableau-titre {{font-weight: 800; font-size: 1rem; color: #000; padding-bottom: 4px; margin-bottom: 6px;
+          border-bottom: 2px solid {ORANGE}; display: inline-block;}}
+  [data-testid="stTable"] table {{border-collapse: separate; border-spacing: 0; border: 1px solid #E6D9C4;
+          border-radius: 10px; overflow: hidden; width: 100%;}}
+  [data-testid="stTable"] th {{background: {ORANGE} !important; color: #000 !important; font-weight: 800 !important;
+          border: none !important;}}
+  [data-testid="stTable"] td {{border: none !important; border-bottom: 1px solid #F0E6D6 !important;}}
+  [data-testid="stTable"] tbody tr:nth-child(even) td {{background: #FBF5EC;}}
+  [data-testid="stTable"] tbody tr:hover td {{background: #FFF1E5;}}
   .st-key-entete {{background: linear-gradient(100deg, #F2F2F2 0%, #FAFAFA 45%, #FFFFFF 100%); border-radius: 16px;
           padding: 14px 18px 8px 18px; margin-bottom: 10px;}}
   .entete-titre {{display: flex; align-items: center; gap: 14px;}}
@@ -319,7 +328,7 @@ def fenetre_detail(titre, df):
         liste = df[champs].rename(columns={"id": "Identifiant", "poste": "Poste", "departement": "Département",
                                            "grade": "Grade", "contrat": "Contrat", "genre": "Genre",
                                            "anciennete": "Ancienneté (ans)"})
-        st.dataframe(liste, hide_index=True, width="stretch", height=300,
+        st.dataframe(zebre(liste), hide_index=True, width="stretch", height=300,
                      column_config={"Ancienneté (ans)": st.column_config.NumberColumn(format="%.1f")})
         st.download_button("Télécharger la liste (CSV)", liste.to_csv(index=False).encode("utf-8"),
                            f"{titre.lower().replace(' ', '_')}.csv", "text/csv", icon=":material/download:", on_click="ignore")
@@ -328,6 +337,23 @@ def fenetre_detail(titre, df):
 
 
 _COMPTEUR_DETAILS = [0]
+ZEBRE = "#FBF5EC"
+
+
+def zebre(df, styler=None):
+    """Lignes alternées blanc / crème (l'en-tête orange vient du thème : config.toml)."""
+    sty = styler if styler is not None else df.style
+    return sty.apply(lambda col: [f"background-color: {ZEBRE}" if i % 2 else "background-color: #FFFFFF"
+                                  for i in range(len(col))], axis=0)
+
+
+def titre_tableau(texte, note=None):
+    st.markdown(f"<div class='tableau-titre'>{texte}</div>" + (f"<div class='note'>{note}</div>" if note else ""),
+                unsafe_allow_html=True)
+
+
+def barre(nom, maxi, fmt="%.0f"):
+    return st.column_config.ProgressColumn(nom, format=fmt, min_value=0, max_value=float(maxi or 1), color="#FF7900")
 
 
 _COMPTEUR_CARTES = [0]
@@ -1357,13 +1383,13 @@ def p_salaires():
         fig.update_traces(line_width=3)
         graphique(st, fig.update_layout(xaxis_title=None, yaxis_title="FCFA"), 280)
     with carte(c2):
-        st.markdown("**Top 10 des postes par salaire moyen**")
+        titre_tableau("Top 10 des postes par salaire moyen", "postes d'au moins 5 collaborateurs")
         t = cur.groupby("poste")["salaire_mensuel"].agg(moyenne="mean", effectif="size")
         t = t[t["effectif"] >= 5].sort_values("moyenne", ascending=False).head(10).reset_index()
-        st.dataframe(t.rename(columns={"poste": "Poste", "moyenne": "Salaire moyen (FCFA)", "effectif": "Effectif"}),
-                     hide_index=True, width="stretch", height=250,
+        t = t.rename(columns={"poste": "Poste", "moyenne": "Salaire moyen (FCFA)", "effectif": "Effectif"})
+        st.dataframe(zebre(t), hide_index=True, width="stretch", height=250,
                      column_config={"Salaire moyen (FCFA)": st.column_config.ProgressColumn(
-                         format="%.0f", min_value=0, max_value=float(t["moyenne"].max()), color="#FF7900")})
+                         format="%.0f", min_value=0, max_value=float(t["Salaire moyen (FCFA)"].max()), color="#FF7900")})
 
 
 # ---------------------------------------------------------------------------
@@ -1399,11 +1425,13 @@ def p_ecart():
     with carte(c1):
         gg = cur.groupby(["grade", "genre"])["salaire_mensuel"].mean().unstack()
         gg["Écart F/H"] = gg["F"] / gg["M"] - 1
-        st.markdown("**Par grade**")
-        st.dataframe(gg.reset_index().rename(columns={"F": "Femmes", "M": "Hommes"}), hide_index=True,
-                     width="stretch", column_config={
-                         "Femmes": st.column_config.NumberColumn(format="%.0f"),
-                         "Hommes": st.column_config.NumberColumn(format="%.0f"),
+        titre_tableau("Salaire moyen par grade", "écart F/H : rouge si les femmes gagnent moins, vert sinon")
+        tg = gg.reset_index().rename(columns={"grade": "Grade", "F": "Femmes", "M": "Hommes"})
+        sty = zebre(tg).map(lambda v: "color: #CD3C14; font-weight: bold" if v < -0.02 else
+                            ("color: #1E7B4C; font-weight: bold" if v > 0.02 else ""), subset=["Écart F/H"])
+        st.dataframe(sty, hide_index=True, width="stretch", column_config={
+                         "Femmes": barre("Femmes", tg[["Femmes", "Hommes"]].max().max()),
+                         "Hommes": barre("Hommes", tg[["Femmes", "Hommes"]].max().max()),
                          "Écart F/H": st.column_config.NumberColumn(format="percent")})
     with carte(c2):
         vg = cur.groupby(["ville_affectation", "genre"])["salaire_mensuel"].mean().reset_index()
@@ -1541,10 +1569,11 @@ def p_absenteisme():
         t = cur.groupby(["departement", "genre"])["taux_absenteisme"].mean().unstack() \
             .reindex(columns=["F", "M"]) * 100
         t.insert(0, "Total", cur.groupby("departement")["taux_absenteisme"].mean() * 100)
-        st.dataframe(t.reset_index().rename(columns={"departement": "Département", "F": "Femmes", "M": "Hommes"}),
-                     hide_index=True, width="stretch", height=290,
-                     column_config={c: st.column_config.NumberColumn(format="%.2f %%")
-                                    for c in ["Total", "Femmes", "Hommes"]})
+        titre_tableau("Taux d'absentéisme par département")
+        ta_ = t.reset_index().rename(columns={"departement": "Département", "F": "Femmes", "M": "Hommes"})
+        st.dataframe(zebre(ta_), hide_index=True, width="stretch", height=290,
+                     column_config={"Total": barre("Total", ta_["Total"].max(), "%.2f %%"),
+                                    **{c: st.column_config.NumberColumn(format="%.2f %%") for c in ["Femmes", "Hommes"]}})
 
 
 # ---------------------------------------------------------------------------
@@ -1599,9 +1628,12 @@ def _absences_dep_corps(per):
                 return
             t = cur.sort_values(["jours_abs_6m", "abs_non_just_6m"], ascending=False).head(10)[
                 ["id", "poste", "grade", "contrat", "jours_abs_6m", "abs_non_just_6m", "nb_abs_6m"]]
-            st.dataframe(t.rename(columns={"id": "Identifiant", "poste": "Poste", "grade": "Grade", "contrat": "Contrat",
-                                           "jours_abs_6m": "Jours d'absence", "abs_non_just_6m": "Non justifiés",
-                                           "nb_abs_6m": "Événements"}), hide_index=True, width="stretch")
+            t = t.rename(columns={"id": "Identifiant", "poste": "Poste", "grade": "Grade", "contrat": "Contrat",
+                                  "jours_abs_6m": "Jours d'absence", "abs_non_just_6m": "Non justifiés",
+                                  "nb_abs_6m": "Événements"})
+            st.dataframe(zebre(t), hide_index=True, width="stretch",
+                         column_config={"Jours d'absence": barre("Jours d'absence", t["Jours d'absence"].max(), "%.1f"),
+                                        "Non justifiés": st.column_config.NumberColumn(format="%.1f")})
 
 
 # ---------------------------------------------------------------------------
@@ -1800,7 +1832,9 @@ def p_anticipation():
             "Départs observés": [pct(x, 0) for x in taux["taux"]],
             "Départs captés": [pct(x, 0) for x in taux["part_des_departs"]],
         })
-        st.dataframe(lect, hide_index=True, width="stretch")
+        st.dataframe(zebre(lect).map(lambda v: f"background-color:{COULEURS_NIVEAU.get(v, '')};font-weight:bold;"
+                                           f"color:{'#fff' if v == 'Très élevé' else '#000'}" if v in COULEURS_NIVEAU else "",
+                                           subset=["Niveau"]), hide_index=True, width="stretch")
         st.caption("Lecture : sur 10 collaborateurs « Très élevé », environ "
                    f"{int(round(taux.loc['Très élevé', 'taux'] * 10))} sont partis dans les 6 mois lors des validations ; "
                    f"pour « Faible », moins de 1 sur 10.")
@@ -1815,7 +1849,10 @@ def p_anticipation():
         agg = act.groupby(["departement", "niveau_risque"]).size().unstack(fill_value=0).reindex(columns=ORDRE_NIVEAUX,
                                                                                                fill_value=0)
         agg["Effectif"] = agg.sum(axis=1)
-        st.dataframe(agg.reset_index().rename(columns={"departement": "Département"}), hide_index=True, width="stretch")
+        ag_ = agg.reset_index().rename(columns={"departement": "Département"})
+        st.dataframe(zebre(ag_), hide_index=True, width="stretch",
+                     column_config={"Très élevé": barre("Très élevé", ag_["Très élevé"].max()),
+                                    "Élevé": barre("Élevé", ag_["Élevé"].max())})
         return
     f1, f2, f3 = st.columns([1.4, 1, 1])
     niveaux = f1.pills("Niveaux", ORDRE_NIVEAUX, selection_mode="multi", default=["Très élevé", "Élevé"], key="niv_antic")
@@ -1829,7 +1866,7 @@ def p_anticipation():
     tab = x.sort_values("probabilite", ascending=False)[
         ["id", "niveau_risque", "probabilite", "departement", "poste", "grade", "contrat", "facteurs"]].copy()
     tab["centile"] = ((1 - x.sort_values("probabilite", ascending=False)["rang_haut"] - 1 / len(act)) * 100).values
-    sel = st.dataframe(tab.style.map(lambda v: f"background-color:{COULEURS_NIVEAU.get(v, '#fff')};"
+    sel = st.dataframe(zebre(tab).map(lambda v: f"background-color:{COULEURS_NIVEAU.get(v, '#fff')};"
                                          f"color:{'#fff' if v == 'Très élevé' else '#222'}", subset=["niveau_risque"]),
                  hide_index=True, width="stretch", height=380, on_select="rerun", selection_mode="single-row",
                  key="liste_antic",
@@ -1964,25 +2001,25 @@ def p_qualite():
     tuile(k[3], "Libellés harmonisés", nb(a["libelles"]["Lignes corrigées"].sum()), "🔤")
     st.write("")
     st.markdown("#### Anomalies détectées dans les fichiers bruts et règle appliquée")
-    st.dataframe(t, hide_index=True, width="stretch")
+    st.dataframe(zebre(t), hide_index=True, width="stretch")
     st.markdown(
         "<div class='avertissement'><b>Point clé :</b> 341 lignes de l'historique avaient une dernière absence datée "
         "<i>après</i> la date de référence, ce qui n'arrive jamais dans les données du 31/12/2024. Utiliser cette date "
         "aurait fait apprendre au modèle une information du futur. Elle est neutralisée, et la récence des absences est "
         "recalculée à partir des absences mois par mois.</div>", unsafe_allow_html=True)
     st.markdown("#### Libellés harmonisés")
-    st.dataframe(a["libelles"], hide_index=True, width="stretch")
+    st.dataframe(zebre(a["libelles"]), hide_index=True, width="stretch")
     c1, c2 = st.columns([1.3, 1])
     with c1:
         st.markdown("#### Valeurs manquantes")
-        st.dataframe(a["manquants"], hide_index=True, width="stretch",
+        st.dataframe(zebre(a["manquants"]), hide_index=True, width="stretch",
                      column_config={"Manquant (historique)": st.column_config.NumberColumn(format="percent"),
                                     "Manquant (31/12/2024)": st.column_config.NumberColumn(format="percent")})
         st.caption("Une valeur manquante n'est jamais remplacée par une valeur faible : les indicateurs portent sur la "
                    "population renseignée, et la couverture est affichée en tête de chaque page.")
     with c2:
         st.markdown("#### Contrôles de cohérence")
-        st.dataframe(a["coherence"], hide_index=True, width="stretch")
+        st.dataframe(zebre(a["coherence"]), hide_index=True, width="stretch")
 
 
 # ---------------------------------------------------------------------------
