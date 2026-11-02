@@ -427,44 +427,9 @@ def bilan(df, scores, taux_niveaux, per, prec, coh, coh_prec, contexte, nominati
     g_niv = _png(fig, 8.6, 6)
     g_sig = _barres_h(sig, f"Collaborateurs signalés par {lib_axe}", nb) if len(sig) else Spacer(1, 1)
 
-    # --- plan d'action (règles explicites)
-    actions = []
-    for d_, ligne in td.iterrows():
-        if ligne["mean"] >= dep + 0.03 and len(actions) < 2:
-            n_sig = int(sig.get(d_, 0))
-            actions.append(("Haute", f"{d_} : {pct(ligne['mean'])} de départs, {pct(ligne['mean'] - dep, 1).replace(' %', ' pt')} "
-                                      f"au-dessus du périmètre", f"Entretiens de rétention ciblés sur les {n_sig} "
-                                      f"collaborateurs signalés ({lib_axe} {d_})", "Taux de départ de la cohorte suivante"))
-    if sous_ref.mean() > .1:
-        n_sr = int((sous_ref & cur["id"].isin(sc[sc["signale"]]["id"])).sum())
-        actions.append(("Haute", f"{pct(sous_ref.mean(), 0)} de l'effectif ({nb(sous_ref.sum())}) payé sous 90 % de la "
-                                 "référence du grade", f"Revue salariale prioritaire, en commençant par les {n_sr} "
-                                 "collaborateurs signalés concernés", "Part sous 90 % de la référence"))
-    perf_eng = cur[(cur["performance_actuelle"] >= 4) & (cur["engagement_actuel"] < 3)]
-    if len(perf_eng):
-        actions.append(("Moyenne", f"{len(perf_eng)} profils performants mais peu engagés (performance ≥ 4, engagement < 3)",
-                        "Entretiens de carrière et plan de développement individuel", "Engagement au semestre suivant"))
-    ab = cur[cur[axe] != "Non renseigné"].groupby(axe)["taux_absenteisme"].mean()
-    if len(ab) and ab.max() > absn * 1.15:
-        actions.append(("Moyenne", f"{ab.idxmax()} : absentéisme de {pct(ab.max(), 2)} contre {pct(absn, 2)} en moyenne",
-                        "Analyse des causes avec le manager (absences non justifiées, charge, organisation)",
-                        f"Taux d'absentéisme du {lib_axe}"))
-    ec = ecart.dropna()
-    if len(ec) and ec.abs().max() > .05:
-        g_ = ec.abs().idxmax()
-        actions.append(("Moyenne", f"Écart de salaire médian F/H de {pct(ec[g_])} en {g_}",
-                        f"Audit d'équité salariale du grade {g_} à poste et ancienneté comparables", "Écart médian F/H"))
-    manq = cur["performance_actuelle"].isna().mean()
-    if manq > .05:
-        actions.append(("Basse", f"{pct(manq, 0)} des évaluations de performance manquantes",
-                        "Relancer les managers pour compléter les évaluations", "Taux d'évaluations renseignées"))
-    if len(tn):
-        cap = tn.set_index("niveau")
-        part = cap.loc[["Très élevé", "Élevé"], "part_des_departs"].sum() if "part_des_departs" in cap else None
-        actions.append(("Cadre", f"Les niveaux « très élevé » et « élevé » ({signales} personnes) ont capté "
-                                 f"{pct(part, 0)} des départs en validation", "Limiter l'accompagnement à ce groupe pour "
-                                 "concentrer l'effort ; ne jamais fonder une décision défavorable sur le score",
-                        "Part des départs couverte"))
+    # --- plan d'action (règles explicites, partagées avec la page Recommandations du dashboard)
+    actions = [(a["priorite"], a["constat"], a["action"], a["indicateur"])
+               for a in plan_action(cur, hc, sc, taux_niveaux, axe, lib_axe)]
 
     # --- assemblage
     meta = {"titre_doc": f"Bilan RH semestriel · TelcomCI · {per}", "auteur": contexte["utilisateur"], "couverture": True,
@@ -532,6 +497,75 @@ def bilan(df, scores, taux_niveaux, per, prec, coh, coh_prec, contexte, nominati
         "formation).", S["corps"])])]
     doc.build(e)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Plan d'action : règles explicites appliquées aux indicateurs (bilan PDF et page Recommandations)
+# ---------------------------------------------------------------------------
+def plan_action(cur, hc, sc, taux_niveaux, axe="departement", lib_axe="département"):
+    """cur : effectif à la date choisie ; hc : cohorte historique (départ connu) ; sc : scores du périmètre.
+    Renvoie une liste de dicts : priorite, constat, action, indicateur, page (adresse de la page à ouvrir)."""
+    actions = []
+    dep = hc["target"].mean()
+    td = hc[hc[axe] != "Non renseigné"].groupby(axe)["target"].agg(["mean", "size", "sum"])
+    td = td[td["size"] >= 20].sort_values("mean", ascending=False)
+    sig = sc[sc["signale"]][axe].value_counts()
+    signales = int(sc["signale"].sum())
+    for d_, ligne in td.iterrows():
+        if ligne["mean"] >= dep + 0.03 and sum(a["priorite"] == "Haute" for a in actions) < 2:
+            n_sig = int(sig.get(d_, 0))
+            actions.append(dict(priorite="Haute", page="anticipation",
+                                constat=f"{d_} : {pct(ligne['mean'])} de départs à 6 mois, "
+                                        f"{pct(ligne['mean'] - dep, 1).replace(' %', ' pt')} au-dessus du périmètre",
+                                action=f"Entretiens de rétention ciblés sur les {n_sig} collaborateurs signalés "
+                                       f"({lib_axe} {d_})", indicateur="Taux de départ de la cohorte suivante"))
+    sous_ref = cur["ratio_salaire_reference"] < 0.9
+    if sous_ref.mean() > .1:
+        n_sr = int((sous_ref & cur["id"].isin(sc[sc["signale"]]["id"])).sum())
+        actions.append(dict(priorite="Haute", page="salaires",
+                            constat=f"{pct(sous_ref.mean(), 0)} de l'effectif ({nb(sous_ref.sum())}) payé sous 90 % de "
+                                    "la référence du grade",
+                            action=f"Revue salariale prioritaire, en commençant par les {n_sr} collaborateurs signalés "
+                                   "concernés", indicateur="Part sous 90 % de la référence"))
+    perf_eng = cur[(cur["performance_actuelle"] >= 4) & (cur["engagement_actuel"] < 3)]
+    if len(perf_eng):
+        actions.append(dict(priorite="Moyenne", page="performance",
+                            constat=f"{len(perf_eng)} profils performants mais peu engagés (performance ≥ 4, "
+                                    "engagement < 3)",
+                            action="Entretiens de carrière et plan de développement individuel",
+                            indicateur="Engagement au semestre suivant"))
+    absn = cur["taux_absenteisme"].mean()
+    ab = cur[cur[axe] != "Non renseigné"].groupby(axe)["taux_absenteisme"].mean()
+    if len(ab) and ab.max() > absn * 1.15:
+        actions.append(dict(priorite="Moyenne", page="absences-departement",
+                            constat=f"{ab.idxmax()} : absentéisme de {pct(ab.max(), 2)} contre {pct(absn, 2)} en moyenne",
+                            action="Analyse des causes avec le manager (absences non justifiées, charge, organisation)",
+                            indicateur=f"Taux d'absentéisme du {lib_axe}"))
+    fh = cur[cur["genre"].isin(["F", "M"])].groupby(["grade", "genre"])["salaire_mensuel"].median().unstack()
+    n_fh = cur[cur["genre"].isin(["F", "M"])].groupby(["grade", "genre"]).size().unstack()
+    if {"F", "M"} <= set(fh.columns):
+        ec = (fh["F"] / fh["M"] - 1).where((n_fh["F"] >= 10) & (n_fh["M"] >= 10)).dropna()
+        if len(ec) and ec.abs().max() > .05:
+            g_ = ec.abs().idxmax()
+            actions.append(dict(priorite="Moyenne", page="equite-salariale",
+                                constat=f"Écart de salaire médian F/H de {pct(ec[g_])} en {g_}",
+                                action=f"Audit d'équité salariale du grade {g_} à poste et ancienneté comparables",
+                                indicateur="Écart médian F/H"))
+    manq = cur["performance_actuelle"].isna().mean()
+    if manq > .05:
+        actions.append(dict(priorite="Basse", page="qualite-donnees",
+                            constat=f"{pct(manq, 0)} des évaluations de performance manquantes",
+                            action="Relancer les managers pour compléter les évaluations",
+                            indicateur="Taux d'évaluations renseignées"))
+    tn = taux_niveaux.reset_index().set_index("niveau")
+    if len(tn) and "part_des_departs" in tn:
+        part = tn.loc[["Très élevé", "Élevé"], "part_des_departs"].sum()
+        actions.append(dict(priorite="Cadre", page="anticipation",
+                            constat=f"Les niveaux « très élevé » et « élevé » ({signales} personnes) ont capté "
+                                    f"{pct(part, 0)} des départs en validation",
+                            action="Limiter l'accompagnement à ce groupe pour concentrer l'effort ; ne jamais fonder une "
+                                   "décision défavorable sur le score", indicateur="Part des départs couverte"))
+    return actions
 
 
 # ---------------------------------------------------------------------------

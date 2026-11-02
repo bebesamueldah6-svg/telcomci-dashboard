@@ -106,3 +106,12 @@ streamlit run dashboard/app.py
 1. Sur https://share.streamlit.io : **Create app** → dépôt, branche `main`, fichier `dashboard/app.py`.
 2. Avant ou juste après le déploiement : **Settings** → **Secrets** → coller les comptes (voir ci-dessus).
 3. Les mises à jour poussées sur `main` sont redéployées automatiquement.
+
+## Usage des outils d'IA
+
+- **Outils** : Claude (Anthropic), utilisé comme assistant de développement pour le dashboard.
+- **Usages principaux** : proposition de mises en page et de styles Streamlit, écriture du code des pages, des exports (Excel, PDF) et du moteur de questions libres, captures d'écran pour relecture.
+- **Méthode** : chaque proposition a été faite sur une branche séparée, montrée en captures, puis validée, modifiée ou rejetée par l'équipe avant d'être fusionnée sur `main`.
+- **Rejeté ou modifié par l'équipe** : tuiles à bande latérale colorée, premiers avatars dessinés à la main (remplacés par DiceBear Avataaars), fond crème trop pâle, titre renommé (le nom TelcomCI a été conservé).
+- **Vérifié** : les chiffres affichés sont recalculés à partir des données (pas saisis à la main) ; le plan d'action repose sur des règles explicites, identiques dans la page Recommandations et dans le bilan PDF.
+- **Décisions prises par l'équipe** : charte inspirée d'Orange, séparation des rôles DRH / Direction générale, exclusion du genre des variables du modèle, usage du niveau de risque comme aide à l'entretien et jamais comme critère de décision.

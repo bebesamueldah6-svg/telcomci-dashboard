@@ -79,6 +79,9 @@ st.markdown(f"""
   .fl-lib {{color: #595959;}} .fl-sep {{color: #8C8C8C;}} .fl-val {{font-weight: 700; color: #1A1A1A;}}
   .pastille-note {{width: fit-content; margin: 8px auto 4px auto; padding: 6px 18px; border-radius: 999px;
           background: #FFF1E5; border: 1px solid #FFD0A6; color: #333;}}
+  .reco-prio {{text-align: center; font-weight: 800; border-radius: 999px; padding: 6px 4px; font-size: .85rem;}}
+  .reco-constat {{font-weight: 800; color: #000; font-size: 1.02rem;}}
+  .reco-action {{color: #333; margin: 4px 0 2px 0;}}
   .tableau-titre {{font-weight: 800; font-size: 1rem; color: #000; padding-bottom: 4px; margin-bottom: 6px;
           border-bottom: 2px solid {ORANGE}; display: inline-block;}}
   [data-testid="stTable"] table {{border-collapse: separate; border-spacing: 0; border: 1px solid #E6D9C4;
@@ -667,6 +670,9 @@ AIDE_PAGES = {
     "vue-ensemble": "**Cette page** : les grands équilibres (effectif, diversité, recrutements, départs) en un coup d'œil.",
     "assistant": "**Cette page** : questions fréquentes de la DRH. Les réponses sont calculées sur les données, sans IA "
                  "externe : aucune donnée ne quitte le dashboard.",
+    "recommandations": "**Cette page** : plan d'action établi par des règles explicites (turnover nettement au-dessus "
+                       "de la moyenne, salaires sous 90 % de la référence, profils performants peu engagés, "
+                       "absentéisme élevé, écart F/H, évaluations manquantes). Identique au bilan PDF.",
     "demographie": "**Cette page** : la structure de l'effectif. « Voir le détail » sous une carte ouvre la liste correspondante.",
     "diversite": "**Cette page** : répartition par génération, genre et niveau d'études. Génération Z : nés après 1996.",
     "tendances": "**Cette page** : évolution semestrielle depuis juin 2022. Cliquez sur une période pour la sélectionner.",
@@ -1337,11 +1343,33 @@ def p_salaires():
     d, per, _ = en_tete(7, "Analyse salariale", cle="sal")
     cur = d[d["periode"] == per]
     c = st.columns(4)
-    tuile(c[0], "Masse salariale mensuelle (FCFA)", fcfa(cur["salaire_mensuel"].sum()), "💰")
-    tuile(c[1], "Salaire moyen (FCFA)", fcfa(cur["salaire_mensuel"].mean()), "👤")
-    tuile(c[2], "Salaire moyen · hommes", fcfa(cur.loc[cur["genre"] == "M", "salaire_mensuel"].mean()), "👨")
-    tuile(c[3], "Salaire moyen · femmes", fcfa(cur.loc[cur["genre"] == "F", "salaire_mensuel"].mean()), "👩")
+    par = d.groupby("periode")
+    masse_per, moy_per, med_per = par["salaire_mensuel"].sum(), par["salaire_mensuel"].mean(), par["salaire_mensuel"].median()
+    sexe = d[d["genre"].isin(["F", "M"])].groupby(["periode", "genre"])["salaire_mensuel"].mean().unstack()
+    tuile(c[0], "Masse salariale mensuelle (FCFA)", fcfa(cur["salaire_mensuel"].sum()), "💰", evolution(masse_per, per))
+    tuile(c[1], "Salaire moyen (FCFA)", fcfa(cur["salaire_mensuel"].mean()), "👤", evolution(moy_per, per))
+    tuile(c[2], "Salaire moyen · hommes", fcfa(cur.loc[cur["genre"] == "M", "salaire_mensuel"].mean()), "👨",
+          evolution(sexe["M"], per) if "M" in sexe else None)
+    tuile(c[3], "Salaire moyen · femmes", fcfa(cur.loc[cur["genre"] == "F", "salaire_mensuel"].mean()), "👩",
+          evolution(sexe["F"], per) if "F" in sexe else None)
     st.write("")
+    with carte(st):
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        fig.add_trace(go.Bar(x=masse_per.index, y=masse_per.values, name="Masse salariale mensuelle",
+                             marker_color=[JAUNE if p_ == per else "#D6D6D6" for p_ in masse_per.index],
+                             text=[fcfa(v) for v in masse_per.values], textposition="inside", insidetextanchor="end",
+                             textfont=dict(color=["#000" if p_ == per else "#333" for p_ in masse_per.index])),
+                      secondary_y=False)
+        fig.add_trace(go.Scatter(x=med_per.index, y=med_per.values, name="Salaire médian", mode="lines+markers+text",
+                                 text=[fcfa(v) for v in med_per.values], textposition="top center",
+                                 line=dict(color=GRIS_FONCE, width=2.5)), secondary_y=True)
+        fig.update_yaxes(visible=False, secondary_y=False, range=[0, masse_per.max() * 1.6])
+        ecart = max(med_per.max() - med_per.min(), med_per.max() * .02)
+        fig.update_yaxes(visible=False, secondary_y=True, range=[med_per.min() - 3.2 * ecart, med_per.max() + .5 * ecart])
+        hausse = masse_per.iloc[-1] / masse_per.iloc[0] - 1 if len(masse_per) > 1 and masse_per.iloc[0] else None
+        fig.update_layout(title=f"Évolution de la masse salariale et du salaire médian"
+                                + (f" · {pct(hausse, 0)} depuis {masse_per.index[0]}" if hausse is not None else ""))
+        graphique(st, fig, 290)
     c1, c2, c3 = st.columns([1.8, 1, 1.3])
     with carte(c1):
         dep = cur.groupby("departement")["salaire_mensuel"].agg(["sum", "mean"]).sort_values("sum", ascending=False)
@@ -1354,10 +1382,7 @@ def p_salaires():
         graphique(st, fig, 300)
     with c2:
         top = cur.groupby("ville_affectation")["salaire_mensuel"].mean().sort_values(ascending=False)
-        st.markdown(f"<div class='tuile'><div class='libelle'>Ville au salaire moyen le plus élevé</div>"
-                    f"<div style='font-size:1.2rem;color:#555'>{top.index[0]}</div>"
-                    f"<div class='valeur'>{nb(top.iloc[0])}</div><div class='libelle'>FCFA par mois</div></div>",
-                    unsafe_allow_html=True)
+        tuile(st, f"Salaire moyen le plus élevé · {top.index[0]}", f"{fcfa(top.iloc[0])} FCFA", "🏢")
         st.write("")
         with carte(st):
             v = top.sort_values().reset_index()
@@ -1518,14 +1543,37 @@ def p_performance():
 def p_absenteisme():
     d, per, _ = en_tete(10, "Absentéisme", cle="abs")
     cur = d[d["periode"] == per]
-    c1, c2, c3, c4 = st.columns([0.9, 1.4, 1.3, 1.3])
+    c1, c2 = st.columns([0.9, 3.0])
     with c1:
-        tuile(st, "Taux d'absentéisme", pct(cur["taux_absenteisme"].mean(), 2), "👥")
+        abs_per = d.groupby("periode")["taux_absenteisme"].mean()
+        abs_g = d[d["genre"].isin(["F", "M"])].groupby(["periode", "genre"])["taux_absenteisme"].mean().unstack()
+        tuile(st, "Taux d'absentéisme", pct(cur["taux_absenteisme"].mean(), 2), "👥", evolution(abs_per, per), inverse=True)
         st.write("")
-        tuile(st, "Hommes", pct(cur.loc[cur["genre"] == "M", "taux_absenteisme"].mean(), 2), "👨")
+        tuile(st, "Hommes", pct(cur.loc[cur["genre"] == "M", "taux_absenteisme"].mean(), 2), "👨",
+              evolution(abs_g["M"], per) if "M" in abs_g else None, inverse=True)
         st.write("")
-        tuile(st, "Femmes", pct(cur.loc[cur["genre"] == "F", "taux_absenteisme"].mean(), 2), "👩")
+        tuile(st, "Femmes", pct(cur.loc[cur["genre"] == "F", "taux_absenteisme"].mean(), 2), "👩",
+              evolution(abs_g["F"], per) if "F" in abs_g else None, inverse=True)
     with carte(c2):
+        tend = abs_g.rename(columns={"F": "Femmes", "M": "Hommes"})
+        tend.insert(0, "Ensemble", abs_per)
+        fig = go.Figure()
+        for nom_, coul, larg in [("Ensemble", JAUNE, 3.2), ("Femmes", "#FFB27A", 2), ("Hommes", GRIS_FONCE, 2)]:
+            if nom_ in tend:
+                fig.add_trace(go.Scatter(x=tend.index, y=tend[nom_], name=nom_, mode="lines+markers",
+                                         line=dict(color=coul, width=larg),
+                                         text=[pct(v, 2) for v in tend[nom_]] if nom_ == "Ensemble" else None,
+                                         textposition="top center"))
+        fig.data[0].mode = "lines+markers+text"
+        fig.update_yaxes(tickformat=".1%")
+        e_ = evolution(abs_per, per)
+        fig.update_layout(title="Tendance du taux d'absentéisme"
+                                + (f" · {'+' if (abs_per.iloc[-1] - abs_per.iloc[0]) >= 0 else '−'}"
+                                   f"{abs(abs_per.iloc[-1] - abs_per.iloc[0]) * 100:.2f} pt depuis {abs_per.index[0]}"
+                                   .replace(".", ",") if len(abs_per) > 1 else ""))
+        graphique(st, fig.update_layout(xaxis_title=None), 330)
+    c2b, c3, c4 = st.columns([1.4, 1.3, 1.3])
+    with carte(c2b):
         ca = cur.groupby(["tranche_age", "contrat"])["taux_absenteisme"].mean().reset_index()
         graphique(st, px.bar(ca, x="tranche_age", y="taux_absenteisme", color="contrat", barmode="group",
                              text=ca["taux_absenteisme"].map(lambda v: pct(v, 1)), title="Contrat × tranche d'âge",
@@ -1794,7 +1842,7 @@ def _bloc_capacite(act, capacite):
 
 def p_anticipation():
     en_tete(15, "Anticipation des départs", periodes=None, cle="antic", avec_departement=False)
-    act, _ = modele_risque()
+    act, contrib = modele_risque()
     taux, capacite, auc = fiabilite()
     st.markdown(
         "<div class='avertissement'><b>Signal statistique à examiner, pas une prédiction individuelle.</b> "
@@ -1838,6 +1886,32 @@ def p_anticipation():
         st.caption("Lecture : sur 10 collaborateurs « Très élevé », environ "
                    f"{int(round(taux.loc['Très élevé', 'taux'] * 10))} sont partis dans les 6 mois lors des validations ; "
                    f"pour « Faible », moins de 1 sur 10.")
+
+    # Facteurs qui pèsent dans le score, à l'échelle de l'entreprise
+    st.markdown("#### Quels facteurs pèsent le plus dans le score ?")
+    st.caption("Contributions du modèle par famille de variables, mesurées par rapport à un collaborateur moyen. "
+               "Ce sont des associations statistiques, pas des causes ; le genre n'est pas utilisé.")
+    fam = contrib.drop(columns="donnees").rename(columns=FAMILLES)
+    poids = fam.abs().mean()
+    poids = (poids / poids.sum()).sort_values()
+    sig_idx = act.index[act["signale"]]
+    top3 = fam.loc[sig_idx].apply(lambda l: l.nlargest(3)[l.nlargest(3) > 0.04].index.tolist(), axis=1)
+    freq = pd.Series([f for liste in top3 for f in liste]).value_counts() / max(len(sig_idx), 1)
+    freq = freq.reindex(poids.index).fillna(0)
+    f1, f2 = st.columns(2)
+    with carte(f1):
+        graphique(st, px.bar(x=poids.values, y=poids.index, orientation="h", text=[pct(v, 0) for v in poids.values],
+                             title="Poids moyen de chaque famille dans le score (tout l'effectif)",
+                             color_discrete_sequence=[JAUNE]).update_layout(xaxis_visible=False, yaxis_title=None),
+                  300, False, cliquable=False)
+    with carte(f2):
+        graphique(st, px.bar(x=freq.values, y=freq.index, orientation="h", text=[pct(v, 0) for v in freq.values],
+                             title=f"Part des {len(sig_idx)} collaborateurs signalés concernés par chaque famille",
+                             color_discrete_sequence=[JAUNE]).update_layout(xaxis_visible=False, yaxis_title=None),
+                  300, False, cliquable=False)
+    st.markdown(f"<div class='note'>Lecture : « {freq.idxmax()} » fait partie des principaux signaux pour "
+                f"{pct(freq.max(), 0)} des collaborateurs en niveau élevé ou très élevé.</div>", unsafe_allow_html=True)
+    st.write("")
 
     # 2. Capacité d'accompagnement (bloc local : le curseur ne recharge que cette partie)
     _bloc_capacite(act, capacite)
@@ -1992,6 +2066,16 @@ def p_qualite():
     en_tete(16, "Qualité des données", periodes=None, cle="qual", avec_departement=False)
     a = audit()
     t = a["anomalies"]
+    eff = DF.groupby("periode").size()
+    st.markdown(
+        "<div class='avertissement'><b>Écart avec l'énoncé du projet.</b> L'énoncé décrit TelcomCI comme un opérateur de "
+        f"510 collaborateurs répartis dans 10 départements. Les données fournies en comptent <b>{nb(eff.iloc[-1])} au "
+        f"{DATES_LIB[eff.index[-1]]}</b> ({nb(eff.iloc[0])} en {eff.index[0]}), chacun avec un identifiant unique. Le "
+        "dashboard est fidèle aux données. Les "
+        f"<b>{int((DF[DF['periode'] == PERIODES[-1]]['departement'] == 'Non renseigné').sum())} collaborateurs</b> sans "
+        "département sont regroupés dans « Non renseigné » plutôt que supprimés, ce qui explique le 11e libellé à côté "
+        "des 10 départements.</div>", unsafe_allow_html=True)
+    st.write("")
     k = st.columns(4)
     tuile(k[0], "Lignes analysées (historique + 31/12/2024)", nb(a["n"]), "🗂️")
     tuile(k[1], "Corrections de valeurs aberrantes", nb(t.loc[t["Anomalie"].str.startswith(("Salaire nul", "Salaire plus",
@@ -2382,12 +2466,56 @@ def p_assistant():
 
 
 # ---------------------------------------------------------------------------
+# Recommandations : plan d'action établi par des règles explicites (identique au bilan PDF)
+# ---------------------------------------------------------------------------
+COULEURS_PRIORITE = {"Haute": ("#CD3C14", "#FFFFFF"), "Moyenne": ("#FF7900", "#000000"),
+                     "Basse": ("#D6D6D6", "#000000"), "Cadre": ("#000000", "#FFFFFF")}
+
+
+def p_recommandations():
+    d, per, dep = en_tete(3, "Recommandations", cle="reco")
+    cur = d[d["periode"] == per]
+    coh = cohorte(per)
+    hc = d[(d["periode"] == coh) & (d["jeu"] == "historique")]
+    act, _ = modele_risque()
+    taux, _, _ = fiabilite()
+    sc = act if dep == "Tous" else act[act["departement"] == dep]
+    axe, lib = ("departement", "département") if dep == "Tous" else ("grade", "grade")
+    actions = rapport.plan_action(cur, hc, sc, taux, axe, lib)
+    st.markdown(
+        "<div class='avertissement'><b>Plan d'action proposé.</b> Chaque recommandation découle d'une règle explicite "
+        f"appliquée aux indicateurs du {DATES_LIB[per]} (départs : cohorte {coh}). Ce sont des pistes à discuter avec les "
+        "managers ; le niveau de risque ne peut fonder aucune décision défavorable. Le même plan figure dans le bilan "
+        "PDF (page Exports).</div>", unsafe_allow_html=True)
+    st.write("")
+    k = st.columns(4)
+    for col, (prio, icone) in zip(k, [("Haute", "🎯"), ("Moyenne", "📈"), ("Basse", "📝"), ("Cadre", "🛠️")]):
+        tuile(col, f"Priorité {prio.lower()}" if prio != "Cadre" else "Cadre d'usage",
+              nb(sum(a["priorite"] == prio for a in actions)), icone)
+    st.write("")
+    if not actions:
+        st.info("Aucune règle ne se déclenche sur ce périmètre et cette période.")
+    for i, a in enumerate(actions):
+        fond, texte = COULEURS_PRIORITE[a["priorite"]]
+        with carte(st):
+            g, m, dr = st.columns([0.9, 4.2, 1.6], vertical_alignment="center")
+            g.markdown(f"<div class='reco-prio' style='background:{fond};color:{texte}'>{a['priorite']}</div>",
+                       unsafe_allow_html=True)
+            m.markdown(f"<div class='reco-constat'>{a['constat']}</div>"
+                       f"<div class='reco-action'><b>Action :</b> {a['action']}</div>"
+                       f"<div class='note'>Indicateur de suivi : {a['indicateur']}</div>", unsafe_allow_html=True)
+            if a.get("page") in PAGE:
+                dr.page_link(PAGE[a["page"]], label=f"Voir : {PAGE[a['page']].title}", icon=":material/arrow_forward:")
+
+
+# ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
 REGISTRE = [
     # (section, titre, fonction, url, icône, réservé au profil nominatif)
     ("Pilotage", "Vue d'ensemble RH", p_vue_ensemble, "vue-ensemble", "dashboard", False),
     ("Pilotage", "Assistant RH", p_assistant, "assistant", "forum", False),
+    ("Pilotage", "Recommandations", p_recommandations, "recommandations", "checklist", False),
     ("Effectifs", "Analyse démographique", p_demographie, "demographie", "groups", False),
     ("Effectifs", "Diversité", p_diversite, "diversite", "diversity_3", False),
     ("Effectifs", "Historique et tendances", p_tendances, "tendances", "timeline", False),
@@ -2426,8 +2554,8 @@ PAGE = {r["url"]: st.Page(r["fn"], title=r["titre"], icon=f":material/{r['icone'
         for r in REGISTRE_VISIBLE}
 ACCUEIL = st.Page(p_accueil, title="Accueil", icon=":material/home:", url_path="accueil", default=True)
 ORDRE = [ACCUEIL] + [PAGE[r["url"]] for r in REGISTRE_VISIBLE]
-SECTIONS = {"": [ACCUEIL, PAGE["vue-ensemble"], PAGE["assistant"]]}
-for r in REGISTRE_VISIBLE[2:]:
+SECTIONS = {"": [ACCUEIL, PAGE["vue-ensemble"], PAGE["assistant"], PAGE["recommandations"]]}
+for r in REGISTRE_VISIBLE[3:]:
     SECTIONS.setdefault(r["section"], []).append(PAGE[r["url"]])
 COURANTE = st.navigation(SECTIONS, position="top")
 COURANTE.run()
