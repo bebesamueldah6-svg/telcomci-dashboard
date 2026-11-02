@@ -130,15 +130,15 @@ st.markdown(f"""
 # Fond des pages : crème chaud ; l'accueil ajoute un grand anneau orange en filigrane (voir p_accueil).
 # La page de connexion garde son propre fond.
 _FOND_APP = '[data-testid="stApp"], [data-testid="stAppViewContainer"], header[data-testid="stHeader"]'
-CREME = "#FAF7F2"
+CREME = "#F3EADC"
 FOND_PAGES = f"""{_FOND_APP} {{background: {CREME} !important;}}
-  .st-key-entete {{background: #FFFFFF !important; border: 1px solid #EFE7DC;}}
-  .population {{background: #FFFFFF !important; border-color: #EFE7DC !important;}}"""
+  .st-key-entete {{background: #FFFFFF !important; border: 1px solid #E6D9C4;}}
+  .population {{background: #FFFFFF !important; border-color: #E6D9C4 !important;}}"""
 FOND_ANNEAU = f"""{_FOND_APP} {{background-color: {CREME} !important;
     background-image: radial-gradient(circle at calc(100% + 120px) calc(100% + 120px), transparent 330px,
-      rgba(255,121,0,.11) 331px, rgba(255,121,0,.11) 400px, transparent 401px) !important;
+      rgba(255,121,0,.14) 331px, rgba(255,121,0,.14) 400px, transparent 401px) !important;
     background-attachment: fixed !important;}}
-  header[data-testid="stHeader"] {{background: rgba(250,247,242,.92) !important;}}"""
+  header[data-testid="stHeader"] {{background: rgba(243,234,220,.92) !important;}}"""
 if auth.utilisateur():
     st.markdown(f"<style>{FOND_PAGES}</style>", unsafe_allow_html=True)
 
